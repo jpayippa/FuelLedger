@@ -23,9 +23,9 @@ DATE_CANDIDATE_RE = re.compile(
     re.IGNORECASE,
 )
 
-VOLUME_RE = re.compile(r"(\d{1,3}\.\d{2,3})\s*(L|LITRE|LITER|GAL|GALLON)S?\b", re.I)
+VOLUME_RE = re.compile(r"(?<!\d)(\d{1,3}\.\d{2,3})\s*(LITRE|LITER|GALLON|GAL|L)S?", re.I)
 PRICE_PER_UNIT_KEYWORDS = re.compile(r"\b(price\s*/?\s*(gal|l)|ppg|ppl|per\s*(gal|l)|unit\s*price)\b", re.I)
-PRICE_PER_UNIT_RE = re.compile(r"(\d\.\d{3})")
+PRICE_PER_UNIT_RE = re.compile(r"(?<!\d)(\d\.\d{3})(?!\d)")
 
 STATION_BRANDS = [
     "PETRO-CANADA", "PETRO CANADA", "ESSO", "SHELL", "HUSKY", "ULTRAMAR",
@@ -35,6 +35,11 @@ STATION_BRANDS = [
 ]
 
 _ADDRESS_HINT = re.compile(r"\d{2,}|www\.|\.com|@", re.I)
+_BOILERPLATE_LINE = re.compile(
+    r"^(transaction record|sales (receipt|record)|customer('s)? copy|merchant copy|"
+    r"duplicate receipt|tax invoice|invoice|receipt)$",
+    re.I,
+)
 
 
 def _otsu_threshold(img):
@@ -118,7 +123,7 @@ def extract_date(text, today=None):
         candidates.append(parsed)
     if not candidates:
         return None, "none"
-    confidence = "high" if len(candidates) == 1 else "low"
+    confidence = "high" if len(set(candidates)) == 1 else "low"
     return max(candidates), confidence
 
 
@@ -129,8 +134,8 @@ def extract_station(text):
         if brand in upper_text:
             return brand.title(), "high"
 
-    for line in lines[:5]:
-        if _ADDRESS_HINT.search(line):
+    for line in lines[:6]:
+        if _ADDRESS_HINT.search(line) or _BOILERPLATE_LINE.match(line.strip()):
             continue
         if 3 <= len(line) <= 40 and not any(ch.isdigit() for ch in line):
             return line.title(), "low"
