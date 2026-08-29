@@ -123,7 +123,7 @@ def extract_date(text, today=None):
 
 
 def extract_station(text):
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     upper_text = re.sub(r"\s*-\s*", "-", text.upper())
     for brand in STATION_BRANDS:
         if brand in upper_text:

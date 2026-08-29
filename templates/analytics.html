@@ -9,7 +9,8 @@
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <link rel="icon" href="/static/icons/icon-192.png">
 <link rel="stylesheet" href="/static/theme.css">
-<title>Analytics — Gas Receipt Tracker</title>
+<script src="/static/theme-toggle.js"></script>
+<title>Analytics — FuelLedger</title>
 <style>
   .stats {
     display: grid;
@@ -57,33 +58,44 @@
   }
   .chart-tooltip .tt-value { font-weight: 700; }
   .chart-tooltip .tt-label { color: var(--text-muted); margin-top: 0.1rem; }
+
+  .filter-row { margin-bottom: 1.25rem; }
+  .filter-row select {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text-primary); font-size: 0.9rem; font-weight: 600; padding: 0.6rem 0.9rem;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 0.72rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  tbody td { padding: 0.7rem 1rem; font-size: 0.85rem; border-bottom: 1px solid var(--border-soft); color: var(--text-secondary); }
+  tbody tr:last-child td { border-bottom: none; }
+  .table-card { padding: 0; overflow: hidden; }
 </style>
 </head>
 <body>
   <div class="wrap wide">
-    <header>
-      <div class="title-block">
-        <div class="logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 9V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v16h9"/>
-            <path d="M9 15h1"/>
-            <path d="M14 9h3l2.5 2.5V18a1 1 0 0 1-1 1H17"/>
-            <path d="M14 12h3"/>
-            <circle cx="17" cy="18.5" r="1"/>
-          </svg>
-        </div>
-        <div>
-          <h1>Analytics</h1>
-          <div class="subtitle">Spend trends and price history</div>
-        </div>
-      </div>
-      <div class="nav-links">
-        <a class="nav-link" href="/">Home</a>
-        <a class="nav-link active" href="/analytics">Analytics</a>
-      </div>
-    </header>
+    {% set header_title = "Analytics" %}
+    {% set header_subtitle = "Spend trends and price history" %}
+    {% set active_page = "analytics" %}
+    {% include "_header.html" %}
+
+    <div class="filter-row">
+      <select id="vehicle-filter">
+        <option value="">All vehicles</option>
+        {% for v in vehicles %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+      </select>
+    </div>
 
     <div class="stats" id="stats"></div>
+
+    <div id="per-vehicle-section" style="display:none;">
+      <div class="section-label"><span>Per-vehicle summary</span></div>
+      <div class="card table-card">
+        <table id="per-vehicle-table">
+          <thead><tr><th>Vehicle</th><th>Fuel</th><th>Maintenance</th><th>Combined</th><th>Avg fill</th><th>Cost/km</th></tr></thead>
+          <tbody id="per-vehicle-body"></tbody>
+        </table>
+      </div>
+    </div>
 
     <div class="section-label"><span>Monthly spend</span></div>
     <div class="card chart-card" id="chart-monthly"></div>
@@ -98,6 +110,9 @@
     <div class="card chart-card" id="chart-yoy">
       <div class="legend" id="yoy-legend"></div>
     </div>
+
+    <div class="section-label"><span>Maintenance by category</span></div>
+    <div class="card chart-card" id="chart-maintenance"></div>
   </div>
 
   <div class="chart-tooltip" id="tooltip"><div class="tt-value" id="tt-value"></div><div class="tt-label" id="tt-label"></div></div>
@@ -284,11 +299,38 @@
   function renderStats(stats) {
     const el = document.getElementById('stats');
     el.innerHTML = `
-      <div class="stat"><div class="label">Total spent</div><div class="value">$${stats.total.toFixed(2)}</div></div>
+      <div class="stat"><div class="label">Fuel total</div><div class="value">$${stats.total.toFixed(2)}</div></div>
       <div class="stat"><div class="label">This month</div><div class="value">$${stats.this_month.toFixed(2)}</div></div>
       <div class="stat"><div class="label">Average fill</div><div class="value">$${stats.avg_fill.toFixed(2)}</div></div>
       <div class="stat"><div class="label">Avg price/unit</div><div class="value">${stats.avg_price_per_unit != null ? '$' + stats.avg_price_per_unit.toFixed(3) : '—'}</div></div>
+      <div class="stat"><div class="label">Maintenance total</div><div class="value">$${stats.maintenance_total.toFixed(2)}</div></div>
+      <div class="stat"><div class="label">Cost / km</div><div class="value">${stats.cost_per_km != null ? '$' + stats.cost_per_km.toFixed(3) : '—'}</div></div>
     `;
+  }
+
+  function renderPerVehicle(perVehicle) {
+    const section = document.getElementById('per-vehicle-section');
+    if (!perVehicle) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    document.getElementById('per-vehicle-body').innerHTML = perVehicle.map(v => `
+      <tr>
+        <td>${v.vehicle}</td>
+        <td>${money(v.fuel_total_cents)}</td>
+        <td>${money(v.maintenance_total_cents)}</td>
+        <td>${money(v.combined_total_cents)}</td>
+        <td>${money(v.avg_fill_cents)}</td>
+        <td>${v.cost_per_km != null ? '$' + v.cost_per_km.toFixed(3) : '—'}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderMaintenanceChart(items) {
+    renderBarChart('chart-maintenance', items, {
+      labelFn: d => d.category.length > 10 ? d.category.slice(0, 9) + '…' : d.category,
+      valueFn: d => d.total_cents,
+      color: 'var(--orange)',
+      valueFmt: money,
+    });
   }
 
   function monthPeriodLabel(period) {
@@ -301,10 +343,13 @@
   }
 
   async function load() {
-    const res = await fetch('/api/analytics');
+    const vehicleId = document.getElementById('vehicle-filter').value;
+    const qs = vehicleId ? `?vehicle_id=${vehicleId}` : '';
+    const res = await fetch(`/api/analytics${qs}`);
     const data = await res.json();
 
     renderStats(data.stats);
+    renderPerVehicle(data.per_vehicle);
 
     renderBarChart('chart-monthly', data.monthly, {
       labelFn: d => monthPeriodLabel(d.period),
@@ -328,8 +373,10 @@
     });
 
     renderYoyChart(data.year_month_matrix);
+    renderMaintenanceChart(data.maintenance_by_category);
   }
 
+  document.getElementById('vehicle-filter').addEventListener('change', load);
   load();
 </script>
 </body>

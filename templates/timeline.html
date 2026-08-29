@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d0d0d">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<link rel="icon" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/theme.css">
+<script src="/static/theme-toggle.js"></script>
+<title>Timeline — {{ vehicle.name }}</title>
+<style>
+  .entry { display: flex; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--border-soft); }
+  .entry:last-child { border-bottom: none; }
+  .entry-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 0.35rem; flex-shrink: 0; }
+  .entry-dot.fuel { background: var(--accent); }
+  .entry-dot.maintenance { background: var(--orange); }
+  .entry-dot.odometer { background: var(--aqua); }
+  .entry-body { flex: 1; }
+  .entry-top { display: flex; justify-content: space-between; gap: 1rem; }
+  .entry-type { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .entry-date { font-size: 0.78rem; color: var(--text-muted); }
+  .entry-desc { font-size: 0.9rem; margin-top: 0.15rem; }
+  .entry-amount { font-weight: 650; }
+  .entry-odo { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    {% set header_title = vehicle.name %}
+    {% set header_subtitle = "Complete history" %}
+    {% include "_header.html" %}
+
+    <div class="card" id="timeline-card">
+      <div class="empty" id="timeline-empty" style="display:none;">No history yet for this vehicle.</div>
+      <div id="timeline-list"></div>
+    </div>
+  </div>
+
+<script>
+  const vehicleId = {{ vehicle.id }};
+  const TYPE_LABELS = { fuel: 'Fuel', maintenance: 'Maintenance', odometer: 'Odometer' };
+
+  async function load() {
+    const res = await fetch(`/api/timeline/${vehicleId}`);
+    const data = await res.json();
+    const list = document.getElementById('timeline-list');
+    const empty = document.getElementById('timeline-empty');
+    const progressionByKey = {};
+    data.progression.forEach(p => { progressionByKey[p.date + '|' + p.odometer] = p.distance_since_prev; });
+
+    if (!data.timeline.length) { empty.style.display = 'block'; return; }
+
+    list.innerHTML = data.timeline.map(e => {
+      const amount = e.amount_cents != null ? '$' + (e.amount_cents / 100).toFixed(2) : '';
+      const dist = e.odometer != null ? progressionByKey[e.date + '|' + e.odometer] : null;
+      const odoText = e.odometer != null
+        ? `${e.odometer.toLocaleString()} ${dist ? '(+' + Math.round(dist).toLocaleString() + ')' : ''}`
+        : '';
+      return `
+        <div class="entry">
+          <div class="entry-dot ${e.record_type}"></div>
+          <div class="entry-body">
+            <div class="entry-top">
+              <span class="entry-type">${TYPE_LABELS[e.record_type]}</span>
+              <span class="entry-date">${e.date}</span>
+            </div>
+            <div class="entry-desc">${e.description || '-'} ${amount ? `<span class="entry-amount">${amount}</span>` : ''}</div>
+            ${odoText ? `<div class="entry-odo">Odometer: ${odoText}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  load();
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d0d0d">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<link rel="icon" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/theme.css">
+<script src="/static/theme-toggle.js"></script>
+<title>Manage — FuelLedger</title>
+<style>
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin-bottom: 0.7rem; }
+  .field label { display: block; font-size: 0.72rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.3rem; }
+  .field input, .field textarea {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text-primary); font-size: 0.95rem; padding: 0.55rem 0.7rem; outline: none; font-family: inherit;
+  }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+  .item-list { display: flex; flex-direction: column; gap: 0.6rem; }
+  .item-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+    background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 0.7rem 0.9rem;
+  }
+  .item-row.archived { opacity: 0.5; }
+  .item-name { font-weight: 650; font-size: 0.9rem; }
+  .item-meta { font-size: 0.78rem; color: var(--text-muted); }
+  .item-actions { display: flex; gap: 0.5rem; }
+  .item-actions button { background: none; border: none; cursor: pointer; font-size: 0.78rem; font-weight: 600; color: var(--accent); }
+  .item-actions button.danger { color: var(--critical); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    {% set header_title = "Manage" %}
+    {% set header_subtitle = "Vehicles and payment methods" %}
+    {% set active_page = "vehicles" %}
+    {% include "_header.html" %}
+
+    <div class="section-label"><span>Add a vehicle</span></div>
+    <div class="card">
+      <div class="form-grid">
+        <div class="field"><label>Name</label><input id="v-name" placeholder="e.g. My Civic"></div>
+        <div class="field"><label>Year</label><input id="v-year" type="number" placeholder="2020"></div>
+        <div class="field"><label>Make</label><input id="v-make" placeholder="Honda"></div>
+        <div class="field"><label>Model</label><input id="v-model" placeholder="Civic"></div>
+        <div class="field"><label>Fuel type</label><input id="v-fuel-type" placeholder="Gasoline"></div>
+      </div>
+      <div class="field" style="margin-bottom:0.9rem;"><label>Notes</label><textarea id="v-notes" rows="2" placeholder="optional"></textarea></div>
+      <button class="btn btn-primary" id="v-add-btn" style="width:100%;">Add vehicle</button>
+    </div>
+
+    <div class="section-label"><span>Vehicles</span></div>
+    <div class="card">
+      <div class="item-list" id="vehicle-list"></div>
+    </div>
+
+    <div class="section-label"><span>Add a payment method</span></div>
+    <div class="card">
+      <div class="form-grid">
+        <div class="field"><label>Name</label><input id="pm-name" placeholder="e.g. Visa"></div>
+        <div class="field"><label>Notes</label><input id="pm-notes" placeholder="optional"></div>
+      </div>
+      <button class="btn btn-primary" id="pm-add-btn" style="width:100%;">Add payment method</button>
+    </div>
+
+    <div class="section-label"><span>Payment methods</span></div>
+    <div class="card">
+      <div class="item-list" id="pm-list"></div>
+    </div>
+  </div>
+
+<script>
+  let vehicles = {{ vehicles|tojson }};
+  let paymentMethods = {{ payment_methods|tojson }};
+
+  function renderVehicles() {
+    const el = document.getElementById('vehicle-list');
+    if (!vehicles.length) { el.innerHTML = '<div class="empty">No vehicles yet.</div>'; return; }
+    el.innerHTML = vehicles.map(v => `
+      <div class="item-row ${v.is_archived ? 'archived' : ''}">
+        <div>
+          <div class="item-name">${v.name}${v.year ? ' (' + v.year + ')' : ''}</div>
+          <div class="item-meta">${[v.make, v.model, v.fuel_type].filter(Boolean).join(' · ') || '—'}</div>
+        </div>
+        <div class="item-actions">
+          <button data-id="${v.id}" class="archive-vehicle">${v.is_archived ? 'Unarchive' : 'Archive'}</button>
+          <button data-id="${v.id}" class="danger delete-vehicle">Delete</button>
+        </div>
+      </div>
+    `).join('');
+    document.querySelectorAll('.archive-vehicle').forEach(btn => btn.onclick = () => archiveVehicle(btn.dataset.id));
+    document.querySelectorAll('.delete-vehicle').forEach(btn => btn.onclick = () => deleteVehicle(btn.dataset.id));
+  }
+
+  function renderPaymentMethods() {
+    const el = document.getElementById('pm-list');
+    if (!paymentMethods.length) { el.innerHTML = '<div class="empty">No payment methods yet.</div>'; return; }
+    el.innerHTML = paymentMethods.map(p => `
+      <div class="item-row ${p.is_archived ? 'archived' : ''}">
+        <div><div class="item-name">${p.name}</div><div class="item-meta">${p.notes || ''}</div></div>
+        <div class="item-actions"><button data-id="${p.id}" class="archive-pm">${p.is_archived ? 'Unarchive' : 'Archive'}</button></div>
+      </div>
+    `).join('');
+    document.querySelectorAll('.archive-pm').forEach(btn => btn.onclick = () => archivePaymentMethod(btn.dataset.id));
+  }
+
+  document.getElementById('v-add-btn').addEventListener('click', async () => {
+    const name = document.getElementById('v-name').value.trim();
+    if (!name) { alert('Enter a vehicle name.'); return; }
+    await fetch('/api/vehicles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name, year: document.getElementById('v-year').value,
+        make: document.getElementById('v-make').value, model: document.getElementById('v-model').value,
+        fuel_type: document.getElementById('v-fuel-type').value, notes: document.getElementById('v-notes').value,
+      }),
+    });
+    ['v-name', 'v-year', 'v-make', 'v-model', 'v-fuel-type', 'v-notes'].forEach(id => document.getElementById(id).value = '');
+    await refreshVehicles();
+  });
+
+  document.getElementById('pm-add-btn').addEventListener('click', async () => {
+    const name = document.getElementById('pm-name').value.trim();
+    if (!name) { alert('Enter a payment method name.'); return; }
+    await fetch('/api/payment-methods', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, notes: document.getElementById('pm-notes').value }),
+    });
+    document.getElementById('pm-name').value = '';
+    document.getElementById('pm-notes').value = '';
+    await refreshPaymentMethods();
+  });
+
+  async function archiveVehicle(id) {
+    const v = vehicles.find(v => String(v.id) === String(id));
+    await fetch(`/api/vehicles/${id}/archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: !v.is_archived }) });
+    await refreshVehicles();
+  }
+  async function deleteVehicle(id) {
+    if (!confirm('Delete this vehicle? Only works if it has no records — otherwise archive it.')) return;
+    const res = await fetch(`/api/vehicles/${id}/delete`, { method: 'POST' });
+    if (!res.ok) { const data = await res.json(); alert(data.error || 'Could not delete.'); return; }
+    await refreshVehicles();
+  }
+  async function archivePaymentMethod(id) {
+    const p = paymentMethods.find(p => String(p.id) === String(id));
+    await fetch(`/api/payment-methods/${id}/archive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: !p.is_archived }) });
+    await refreshPaymentMethods();
+  }
+
+  async function refreshVehicles() {
+    const res = await fetch('/api/vehicles');
+    const data = await res.json();
+    vehicles = data.vehicles;
+    renderVehicles();
+  }
+  async function refreshPaymentMethods() {
+    const res = await fetch('/api/payment-methods');
+    const data = await res.json();
+    paymentMethods = data.payment_methods;
+    renderPaymentMethods();
+  }
+
+  renderVehicles();
+  renderPaymentMethods();
+</script>
+</body>
+</html>

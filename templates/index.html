@@ -6,260 +6,117 @@
 <meta name="theme-color" content="#0d0d0d">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Gas Tracker">
+<meta name="apple-mobile-web-app-title" content="FuelLedger">
 <link rel="manifest" href="/static/manifest.json">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
 <link rel="icon" href="/static/icons/icon-192.png">
 <link rel="stylesheet" href="/static/theme.css">
-<title>Gas Receipt Tracker</title>
+<script src="/static/theme-toggle.js"></script>
+<title>FuelLedger</title>
 <style>
+  .vehicle-bar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .vehicle-bar select {
+    flex: 1; min-width: 180px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text-primary); font-size: 0.95rem; font-weight: 600;
+    padding: 0.65rem 0.9rem;
+  }
+  .vehicle-meta { color: var(--text-muted); font-size: 0.8rem; }
+
+  .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+  .tab-btn {
+    flex: 1; padding: 0.65rem; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-secondary); font-weight: 650; font-size: 0.85rem;
+    cursor: pointer; transition: all 0.15s ease;
+  }
+  .tab-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .tab-panel { display: none; animation: fadein 0.2s ease; }
+  .tab-panel.active { display: block; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
   .scan-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    width: 100%;
-    padding: 1rem;
-    border-radius: 12px;
-    border: 1.5px dashed var(--border);
-    background: var(--surface-2);
-    color: var(--text-primary);
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem; width: 100%;
+    padding: 1rem; border-radius: 12px; border: 1.5px dashed var(--border); background: var(--surface-2);
+    color: var(--text-primary); font-size: 0.95rem; font-weight: 600; cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease;
   }
   .scan-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
   .scan-btn svg { width: 20px; height: 20px; color: var(--accent); }
-  #photo-input { display: none; }
+  .photo-input { display: none; }
 
   .total-badge {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.4rem;
-    font-weight: 650;
-    background: var(--good-soft);
-    color: #37d637;
-    border: 1px solid rgba(12,163,12,0.25);
-    padding: 0.5rem 0.9rem;
-    border-radius: 999px;
-    font-size: 0.9rem;
+    display: inline-flex; align-items: baseline; gap: 0.4rem; font-weight: 650;
+    background: var(--good-soft); color: var(--good); border: 1px solid var(--good-soft);
+    padding: 0.5rem 0.9rem; border-radius: 999px; font-size: 0.9rem;
   }
   .total-badge .n { font-size: 1.15rem; }
 
-  .scan-status {
-    display: none;
-    align-items: center;
-    gap: 0.6rem;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    margin-top: 0.9rem;
-  }
-  .spinner {
-    width: 16px; height: 16px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.7s linear infinite;
-  }
+  .scan-status { display: none; align-items: center; gap: 0.6rem; color: var(--text-muted); font-size: 0.85rem; margin-top: 0.9rem; }
+  .scan-status.show { display: flex; }
+  .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin 0.7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .review { display: none; margin-top: 1.2rem; }
-  .review.show { display: block; }
-  .scan-status.show { display: flex; }
+  .review { display: none; margin-top: 1.2rem; opacity: 0; transition: opacity 0.25s ease; }
+  .review.show { display: block; opacity: 1; }
 
-  .review-grid {
-    display: grid;
-    grid-template-columns: 96px 1fr;
-    gap: 1rem;
-    margin-bottom: 1rem;
-  }
-  .thumb {
-    width: 96px; height: 96px;
-    border-radius: 10px;
-    object-fit: cover;
-    border: 1px solid var(--border);
-    background: var(--surface-2);
-    cursor: pointer;
-  }
+  .review-grid { display: grid; grid-template-columns: 96px 1fr; gap: 1rem; margin-bottom: 1rem; }
+  .thumb { width: 96px; height: 96px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
   .fields { display: flex; flex-direction: column; gap: 0.7rem; }
   .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
-  .field label {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.72rem;
-    font-weight: 650;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    margin-bottom: 0.3rem;
+  .field label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 0.3rem; }
+  .conf-tag { font-size: 0.6rem; font-weight: 700; text-transform: none; letter-spacing: 0; padding: 0.05rem 0.4rem; border-radius: 999px; display: none; }
+  .field input, .field select, .field textarea {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text-primary); font-size: 0.95rem; padding: 0.55rem 0.7rem; outline: none;
+    font-family: inherit;
   }
-  .conf-tag {
-    font-size: 0.6rem;
-    font-weight: 700;
-    text-transform: none;
-    letter-spacing: 0;
-    padding: 0.05rem 0.4rem;
-    border-radius: 999px;
-    display: none;
-  }
-  .field input, .field select {
-    width: 100%;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 0.95rem;
-    padding: 0.55rem 0.7rem;
-    outline: none;
-  }
-  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
   .field.conf-low input, .field.conf-low select { border-color: var(--warning); }
   .field.conf-low .conf-tag { display: inline-block; background: var(--warning-soft); color: var(--warning); }
   .field.conf-none input, .field.conf-none select { border-color: var(--critical); }
   .field.conf-none .conf-tag { display: inline-block; background: var(--critical-soft); color: var(--critical); }
-
   .unit-row { display: grid; grid-template-columns: 1fr 90px; gap: 0.5rem; }
 
-  .dup-banner {
-    display: none;
-    align-items: center;
-    gap: 0.5rem;
-    background: var(--warning-soft);
-    border: 1px solid rgba(250,178,25,0.3);
-    color: var(--warning);
-    font-size: 0.82rem;
-    font-weight: 600;
-    padding: 0.6rem 0.8rem;
-    border-radius: 10px;
-    margin-bottom: 1rem;
-  }
+  .dup-banner { display: none; align-items: center; gap: 0.5rem; background: var(--warning-soft); border: 1px solid var(--warning-soft); color: var(--warning); font-size: 0.82rem; font-weight: 600; padding: 0.6rem 0.8rem; border-radius: 10px; margin-bottom: 1rem; }
   .dup-banner.show { display: flex; }
   .dup-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
 
-  details.raw {
-    margin-bottom: 1rem;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-  }
+  details.raw { margin-bottom: 1rem; color: var(--text-muted); font-size: 0.8rem; }
   details.raw summary { cursor: pointer; user-select: none; }
-  details.raw pre {
-    white-space: pre-wrap;
-    background: var(--surface-2);
-    border: 1px solid var(--border-soft);
-    border-radius: 8px;
-    padding: 0.7rem;
-    margin-top: 0.5rem;
-    font-size: 0.75rem;
-    max-height: 160px;
-    overflow-y: auto;
-  }
+  details.raw pre { white-space: pre-wrap; background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 8px; padding: 0.7rem; margin-top: 0.5rem; font-size: 0.75rem; max-height: 160px; overflow-y: auto; }
 
   .btn-row { display: flex; gap: 0.7rem; }
   .btn-row .btn { flex: 1; }
 
   .search-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
   .search { flex: 1; position: relative; }
-  .search input {
-    width: 100%;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    padding: 0.65rem 0.9rem 0.65rem 2.2rem;
-    outline: none;
-    transition: border-color 0.15s ease;
-  }
+  .search input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; color: var(--text-primary); font-size: 0.9rem; padding: 0.65rem 0.9rem 0.65rem 2.2rem; outline: none; }
   .search input:focus { border-color: var(--accent); }
-  .search svg {
-    position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%);
-    width: 15px; height: 15px; color: var(--text-muted);
-  }
+  .search svg { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--text-muted); }
   .export-links { display: flex; gap: 0.6rem; }
-  .export-link {
-    color: var(--accent);
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 0.82rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    white-space: nowrap;
-  }
+  .export-link { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
   .export-link:hover { text-decoration: underline; }
   .export-link svg { width: 14px; height: 14px; }
 
   table { width: 100%; border-collapse: collapse; }
-  thead th {
-    text-align: left;
-    font-size: 0.72rem;
-    font-weight: 650;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface-2);
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-  }
+  thead th { text-align: left; font-size: 0.72rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface-2); cursor: pointer; user-select: none; white-space: nowrap; }
   thead th:hover { color: var(--text-secondary); }
-  tbody td {
-    padding: 0.75rem 1rem;
-    font-size: 0.88rem;
-    border-bottom: 1px solid var(--border-soft);
-    color: var(--text-secondary);
-  }
+  tbody td { padding: 0.75rem 1rem; font-size: 0.88rem; border-bottom: 1px solid var(--border-soft); color: var(--text-secondary); }
   tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  tbody tr:hover { background: var(--surface-2); }
   td.amount { color: var(--text-primary); font-weight: 600; }
-  .caution-dot {
-    display: inline-block;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--warning);
-    margin-left: 0.4rem;
-  }
-  .view-btn, .del-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.78rem;
-    font-weight: 600;
-    padding: 0.2rem 0.4rem;
-  }
+  .caution-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--warning); margin-left: 0.4rem; }
+  .view-btn, .del-btn { background: none; border: none; cursor: pointer; font-size: 0.78rem; font-weight: 600; padding: 0.2rem 0.4rem; }
   .view-btn { color: var(--accent); }
   .del-btn { color: var(--critical); }
   .view-btn:hover, .del-btn:hover { text-decoration: underline; }
-
   .table-card { padding: 0; overflow: hidden; }
+  .timeline-link { font-size: 0.82rem; color: var(--accent); text-decoration: none; font-weight: 600; }
+  .timeline-link:hover { text-decoration: underline; }
 
-  .lightbox {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.85);
-    z-index: 100;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-  }
-  .lightbox.show { display: flex; }
+  .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; padding: 2rem; opacity: 0; transition: opacity 0.2s ease; }
+  .lightbox.show { display: flex; opacity: 1; }
   .lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
-  .lightbox-close {
-    position: absolute;
-    top: 1.2rem; right: 1.2rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    width: 36px; height: 36px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 1.1rem;
-  }
+  .lightbox-close { position: absolute; top: 1.2rem; right: 1.2rem; background: var(--surface); border: 1px solid var(--border); color: var(--text-primary); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 1.1rem; }
 
   @media (max-width: 640px) {
     td.station-cell, th:nth-child(3) { display: none; }
@@ -268,145 +125,177 @@
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div class="title-block">
-        <div class="logo">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 9V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v16h9"/>
-            <path d="M9 15h1"/>
-            <path d="M14 9h3l2.5 2.5V18a1 1 0 0 1-1 1H17"/>
-            <path d="M14 12h3"/>
-            <circle cx="17" cy="18.5" r="1"/>
-          </svg>
-        </div>
-        <div>
-          <h1>Gas Receipt Tracker</h1>
-          <div class="subtitle" id="subtitle">{{ receipts|length }} receipt{{ 's' if receipts|length != 1 else '' }} saved</div>
-        </div>
-      </div>
-      <div class="nav-links">
-        <a class="nav-link active" href="/">Home</a>
-        <a class="nav-link" href="/analytics">Analytics</a>
-      </div>
-    </header>
+    {% set header_title = "FuelLedger" %}
+    {% set header_subtitle = "Vehicle expense tracking" %}
+    {% set active_page = "home" %}
+    {% include "_header.html" %}
 
-    <div style="display:flex; justify-content:flex-end; margin-bottom: 1.25rem;">
-      <div class="total-badge">Total <span class="n" id="total-value">${{ '%.2f'|format(total) }}</span></div>
+    {% if not vehicles %}
+    <div class="card empty">
+      No vehicles yet. <a class="timeline-link" href="/vehicles">Add your first vehicle</a> to start logging fuel, maintenance, and mileage.
+    </div>
+    {% else %}
+
+    <div class="vehicle-bar">
+      <select id="vehicle-select">
+        {% for v in vehicles %}
+        <option value="{{ v.id }}">{{ v.name }}{% if v.year %} ({{ v.year }}){% endif %}</option>
+        {% endfor %}
+      </select>
+      <div class="total-badge">Total <span class="n" id="total-value">$0.00</span></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom: 1rem;">
+      <span class="vehicle-meta" id="vehicle-meta"></span>
+      <a class="timeline-link" id="timeline-link" href="#">Full timeline &rarr;</a>
     </div>
 
-    <div class="card">
-      <label class="scan-btn" for="photo-input">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-          <circle cx="12" cy="13" r="4"/>
-        </svg>
-        <span id="scan-btn-label">Scan a receipt</span>
-      </label>
-      <input type="file" id="photo-input" accept="image/*" capture="environment">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="fuel">Fuel</button>
+      <button class="tab-btn" data-tab="maintenance">Maintenance</button>
+      <button class="tab-btn" data-tab="odometer">Odometer</button>
+    </div>
 
-      <div class="scan-status" id="scan-status">
-        <span class="spinner"></span> Reading receipt…
-      </div>
+    <!-- Fuel tab -->
+    <div class="tab-panel active" id="tab-fuel">
+      <div class="card">
+        <label class="scan-btn" for="fuel-photo-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span id="fuel-scan-label">Scan a fuel receipt</span>
+        </label>
+        <input type="file" id="fuel-photo-input" class="photo-input" accept="image/*" capture="environment">
+        <div class="scan-status" id="fuel-scan-status"><span class="spinner"></span> Reading receipt…</div>
 
-      <div class="review" id="review">
-        <div class="dup-banner" id="dup-banner">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <span id="dup-text"></span>
-        </div>
-
-        <div class="review-grid">
-          <img class="thumb" id="thumb" alt="Receipt preview">
-          <div class="fields">
-            <div class="field-row">
-              <div class="field" id="field-date">
-                <label>Date <span class="conf-tag" id="conf-date"></span></label>
-                <input type="date" id="f-date">
+        <div class="review" id="fuel-review">
+          <div class="dup-banner" id="fuel-dup-banner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span id="fuel-dup-text"></span>
+          </div>
+          <div class="review-grid">
+            <img class="thumb" id="fuel-thumb" alt="Receipt preview">
+            <div class="fields">
+              <div class="field-row">
+                <div class="field" id="fuel-field-date"><label>Date <span class="conf-tag" id="fuel-conf-date"></span></label><input type="date" id="fuel-f-date"></div>
+                <div class="field" id="fuel-field-amount"><label>Amount ($) <span class="conf-tag" id="fuel-conf-amount"></span></label><input type="number" id="fuel-f-amount" step="0.01" min="0" max="999.99" placeholder="0.00"></div>
               </div>
-              <div class="field" id="field-amount">
-                <label>Amount ($) <span class="conf-tag" id="conf-amount"></span></label>
-                <input type="number" id="f-amount" step="0.01" min="0" max="999.99" placeholder="0.00">
-              </div>
-            </div>
-            <div class="field" id="field-station">
-              <label>Station <span class="conf-tag" id="conf-station"></span></label>
-              <input type="text" id="f-station" placeholder="e.g. Shell">
-            </div>
-            <div class="field-row">
-              <div class="field" id="field-volume">
-                <label>Volume <span class="conf-tag" id="conf-volume"></span></label>
-                <div class="unit-row">
-                  <input type="number" id="f-volume" step="0.001" min="0" max="500" placeholder="0.000">
-                  <select id="f-unit">
-                    <option value="L">L</option>
-                    <option value="gal">gal</option>
-                  </select>
+              <div class="field" id="fuel-field-station"><label>Station <span class="conf-tag" id="fuel-conf-station"></span></label><input type="text" id="fuel-f-station" placeholder="e.g. Shell"></div>
+              <div class="field-row">
+                <div class="field" id="fuel-field-volume">
+                  <label>Volume <span class="conf-tag" id="fuel-conf-volume"></span></label>
+                  <div class="unit-row"><input type="number" id="fuel-f-volume" step="0.001" min="0" max="500" placeholder="0.000"><select id="fuel-f-unit"><option value="L">L</option><option value="gal">gal</option></select></div>
                 </div>
+                <div class="field" id="fuel-field-price"><label>Price/Unit <span class="conf-tag" id="fuel-conf-price"></span></label><input type="number" id="fuel-f-price" step="0.001" min="0" max="10" placeholder="0.000"></div>
               </div>
-              <div class="field" id="field-price">
-                <label>Price/Unit <span class="conf-tag" id="conf-price"></span></label>
-                <input type="number" id="f-price" step="0.001" min="0" max="10" placeholder="0.000">
+              <div class="field-row">
+                <div class="field"><label>Odometer</label><input type="number" id="fuel-f-odometer" step="1" min="0" placeholder="optional"></div>
+                <div class="field"><label>Payment method</label><select id="fuel-f-payment"><option value="">None</option></select></div>
               </div>
             </div>
           </div>
-        </div>
-        <details class="raw" id="raw-details">
-          <summary>Raw OCR text</summary>
-          <pre id="raw-text"></pre>
-        </details>
-        <div class="btn-row">
-          <button class="btn btn-secondary" id="retake-btn" type="button">Retake</button>
-          <button class="btn btn-primary" id="save-btn" type="button">Save</button>
+          <details class="raw" id="fuel-raw-details"><summary>Raw OCR text</summary><pre id="fuel-raw-text"></pre></details>
+          <div class="btn-row">
+            <button class="btn btn-secondary" id="fuel-retake-btn" type="button">Retake</button>
+            <button class="btn btn-primary" id="fuel-save-btn" type="button">Save</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="section-label">
-      <span>History</span>
-      <div class="export-links">
-        <a class="export-link" href="/export.xlsx">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-          Excel
-        </a>
-        <a class="export-link" href="/export.csv">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-          CSV
-        </a>
+      <div class="section-label">
+        <span>Fuel history</span>
+        <div class="export-links">
+          <a class="export-link" href="/export.xlsx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</a>
+          <a class="export-link" href="/export.csv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>CSV</a>
+        </div>
+      </div>
+      <div class="search-row">
+        <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="fuel-search-input" type="text" placeholder="Search by station, date, or amount…" autocomplete="off"></div>
+      </div>
+      <div class="card table-card">
+        <table id="fuel-table">
+          <thead><tr><th data-sort="date">Date</th><th data-sort="amount">Amount</th><th>Station</th><th></th></tr></thead>
+          <tbody id="fuel-table-body"></tbody>
+        </table>
+        <div class="empty" id="fuel-empty-state">No fuel logs yet for this vehicle.</div>
       </div>
     </div>
 
-    <div class="search-row">
-      <div class="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="search-input" type="text" placeholder="Search by station, date, or amount…" autocomplete="off">
+    <!-- Maintenance tab -->
+    <div class="tab-panel" id="tab-maintenance">
+      <div class="card">
+        <label class="scan-btn" for="maint-photo-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span>Scan invoice (optional — prefills date &amp; cost)</span>
+        </label>
+        <input type="file" id="maint-photo-input" class="photo-input" accept="image/*" capture="environment">
+        <div class="scan-status" id="maint-scan-status"><span class="spinner"></span> Reading invoice…</div>
+
+        <div class="review show" id="maint-review" style="margin-top:1.2rem;">
+          <div class="review-grid">
+            <img class="thumb" id="maint-thumb" alt="Invoice preview" style="display:none;">
+            <div class="fields" style="grid-column: 1 / -1;">
+              <div class="field-row">
+                <div class="field"><label>Date</label><input type="date" id="maint-f-date"></div>
+                <div class="field"><label>Cost ($)</label><input type="number" id="maint-f-amount" step="0.01" min="0" max="99999.99" placeholder="0.00"></div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label>Shop</label><input type="text" id="maint-f-shop" placeholder="e.g. Canadian Tire"></div>
+                <div class="field"><label>Odometer</label><input type="number" id="maint-f-odometer" step="1" min="0" placeholder="optional"></div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Category</label>
+                  <select id="maint-f-category">
+                    {% for c in maintenance_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="field"><label>Payment method</label><select id="maint-f-payment"><option value="">None</option></select></div>
+              </div>
+              <div class="field" id="maint-field-other" style="display:none;"><label>Describe (Other)</label><input type="text" id="maint-f-category-other"></div>
+              <div class="field"><label>Notes</label><textarea id="maint-f-notes" rows="2" placeholder="optional"></textarea></div>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-secondary" id="maint-retake-btn" type="button">Clear photo</button>
+            <button class="btn btn-primary" id="maint-save-btn" type="button">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label"><span>Maintenance history</span></div>
+      <div class="card table-card">
+        <table id="maint-table">
+          <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Shop</th><th></th></tr></thead>
+          <tbody id="maint-table-body"></tbody>
+        </table>
+        <div class="empty" id="maint-empty-state">No maintenance logs yet for this vehicle.</div>
       </div>
     </div>
 
-    <div class="card table-card">
-      <table id="table" style="display: {{ 'none' if not receipts else 'table' }}">
-        <thead>
-          <tr>
-            <th data-sort="date">Date</th>
-            <th data-sort="amount">Amount</th>
-            <th>Station</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="table-body">
-          {% for r in receipts %}
-          <tr data-id="{{ r.id }}">
-            <td>{{ r.date }}{% if r.confidence and (r.confidence.get('date') in ['low','none'] or r.confidence.get('amount') in ['low','none']) %}<span class="caution-dot" title="Low-confidence OCR — double check the original"></span>{% endif %}</td>
-            <td class="amount">${{ '%.2f'|format(r.amount) }}</td>
-            <td class="station-cell">{{ r.station or '-' }}</td>
-            <td>
-              {% if r.image_filename %}<button class="view-btn" data-src="/receipts/{{ r.image_filename }}">View</button>{% endif %}
-              <button class="del-btn" data-id="{{ r.id }}">Delete</button>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <div class="empty" id="empty-state" style="display: {{ 'block' if not receipts else 'none' }}">No receipts yet — scan one above to get started.</div>
+    <!-- Odometer tab -->
+    <div class="tab-panel" id="tab-odometer">
+      <div class="card">
+        <div class="fields">
+          <div class="field-row">
+            <div class="field"><label>Date</label><input type="date" id="odo-f-date"></div>
+            <div class="field"><label>Odometer</label><input type="number" id="odo-f-reading" step="1" min="0" placeholder="e.g. 84213"></div>
+          </div>
+          <div class="field"><label>Note</label><input type="text" id="odo-f-note" placeholder="optional"></div>
+        </div>
+        <div class="btn-row" style="margin-top:1rem;">
+          <button class="btn btn-primary" id="odo-save-btn" type="button" style="flex:1;">Add checkpoint</button>
+        </div>
+      </div>
+
+      <div class="section-label"><span>Odometer history</span></div>
+      <div class="card table-card">
+        <table id="odo-table">
+          <thead><tr><th>Date</th><th>Odometer</th><th>Note</th><th></th></tr></thead>
+          <tbody id="odo-table-body"></tbody>
+        </table>
+        <div class="empty" id="odo-empty-state">No odometer checkpoints yet for this vehicle.</div>
+      </div>
     </div>
+
+    {% endif %}
   </div>
 
   <div class="lightbox" id="lightbox">
@@ -415,240 +304,367 @@
   </div>
 
 <script>
-  const photoInput = document.getElementById('photo-input');
-  const scanStatus = document.getElementById('scan-status');
-  const review = document.getElementById('review');
-  const thumb = document.getElementById('thumb');
-  const fDate = document.getElementById('f-date');
-  const fAmount = document.getElementById('f-amount');
-  const fStation = document.getElementById('f-station');
-  const fVolume = document.getElementById('f-volume');
-  const fUnit = document.getElementById('f-unit');
-  const fPrice = document.getElementById('f-price');
-  const rawText = document.getElementById('raw-text');
-  const scanBtnLabel = document.getElementById('scan-btn-label');
-  const dupBanner = document.getElementById('dup-banner');
-  const dupText = document.getElementById('dup-text');
-
+  const VEHICLES = {{ vehicles|tojson }};
+  const MAINT_CATEGORIES = {{ maintenance_categories|tojson }};
+  let vehicleId = null;
+  let paymentMethods = [];
+  let fuelLogs = [];
   let sortState = { key: 'date', dir: 'desc' };
-  let currentReceipts = {{ receipts|tojson }};
-  let currentConfidence = {};
+
+  function centsToStr(cents) { return '$' + (cents / 100).toFixed(2); }
+
+  // ---- Tabs ----
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---- Vehicle selection ----
+  const vehicleSelect = document.getElementById('vehicle-select');
+  if (vehicleSelect) {
+    const stored = localStorage.getItem('fuelledger-vehicle');
+    if (stored && VEHICLES.some(v => String(v.id) === stored)) vehicleSelect.value = stored;
+    vehicleId = parseInt(vehicleSelect.value, 10);
+    vehicleSelect.addEventListener('change', () => {
+      vehicleId = parseInt(vehicleSelect.value, 10);
+      localStorage.setItem('fuelledger-vehicle', vehicleId);
+      loadAll();
+    });
+    updateVehicleMeta();
+  }
+
+  function updateVehicleMeta() {
+    const v = VEHICLES.find(v => v.id === vehicleId);
+    if (!v) return;
+    const parts = [v.make, v.model, v.fuel_type].filter(Boolean);
+    document.getElementById('vehicle-meta').textContent = parts.join(' · ');
+    document.getElementById('timeline-link').href = '/timeline/' + vehicleId;
+  }
+
+  async function loadPaymentMethods() {
+    const res = await fetch('/api/payment-methods');
+    const data = await res.json();
+    paymentMethods = data.payment_methods.filter(p => !p.is_archived);
+    ['fuel-f-payment', 'maint-f-payment'].forEach(id => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = '<option value="">None</option>' + paymentMethods.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    });
+  }
+
+  // ================= FUEL =================
+  const fuelPhotoInput = document.getElementById('fuel-photo-input');
+  const fuelScanStatus = document.getElementById('fuel-scan-status');
+  const fuelReview = document.getElementById('fuel-review');
+  const fuelThumb = document.getElementById('fuel-thumb');
+  const fuelFDate = document.getElementById('fuel-f-date');
+  const fuelFAmount = document.getElementById('fuel-f-amount');
+  const fuelFStation = document.getElementById('fuel-f-station');
+  const fuelFVolume = document.getElementById('fuel-f-volume');
+  const fuelFUnit = document.getElementById('fuel-f-unit');
+  const fuelFPrice = document.getElementById('fuel-f-price');
+  const fuelRawText = document.getElementById('fuel-raw-text');
+  const fuelScanLabel = document.getElementById('fuel-scan-label');
+  const fuelDupBanner = document.getElementById('fuel-dup-banner');
+  let fuelConfidence = {};
 
   function setFieldConfidence(fieldId, confId, level) {
     const field = document.getElementById(fieldId);
     const tag = document.getElementById(confId);
+    if (!field) return;
     field.classList.remove('conf-low', 'conf-none');
     if (level === 'low') { field.classList.add('conf-low'); tag.textContent = 'check'; }
     else if (level === 'none') { field.classList.add('conf-none'); tag.textContent = 'missing'; }
     else { tag.textContent = ''; }
   }
 
-  function checkDuplicate() {
-    const d = fDate.value, a = parseFloat(fAmount.value);
-    if (!d || isNaN(a)) { dupBanner.classList.remove('show'); return; }
-    const match = currentReceipts.find(r => r.date === d && Math.abs(r.amount - a) < 0.01);
+  function checkFuelDuplicate() {
+    const d = fuelFDate.value, a = parseFloat(fuelFAmount.value);
+    if (!d || isNaN(a)) { fuelDupBanner.classList.remove('show'); return; }
+    const match = fuelLogs.find(r => r.date === d && Math.abs(r.amount - a) < 0.01);
     if (match) {
-      dupText.textContent = `Possible duplicate: a $${match.amount.toFixed(2)} receipt from ${match.date} already exists.`;
-      dupBanner.classList.add('show');
-    } else {
-      dupBanner.classList.remove('show');
-    }
+      document.getElementById('fuel-dup-text').textContent = `Possible duplicate: a $${match.amount.toFixed(2)} entry from ${match.date} already exists.`;
+      fuelDupBanner.classList.add('show');
+    } else fuelDupBanner.classList.remove('show');
   }
-  fDate.addEventListener('input', checkDuplicate);
-  fAmount.addEventListener('input', checkDuplicate);
+  fuelFDate.addEventListener('input', checkFuelDuplicate);
+  fuelFAmount.addEventListener('input', checkFuelDuplicate);
 
-  photoInput.addEventListener('change', async () => {
-    const file = photoInput.files[0];
+  fuelPhotoInput.addEventListener('change', async () => {
+    const file = fuelPhotoInput.files[0];
     if (!file) return;
-
-    thumb.src = URL.createObjectURL(file);
-    review.classList.remove('show');
-    scanStatus.classList.add('show');
-    scanBtnLabel.textContent = 'Scan another receipt';
+    fuelThumb.src = URL.createObjectURL(file);
+    fuelReview.classList.remove('show');
+    fuelScanStatus.classList.add('show');
+    fuelScanLabel.textContent = 'Scan another receipt';
 
     const formData = new FormData();
     formData.append('receipt', file);
-
     try {
       const res = await fetch('/scan', { method: 'POST', body: formData });
       const data = await res.json();
-      fDate.value = data.date || '';
-      fAmount.value = data.amount != null ? data.amount.toFixed(2) : '';
-      fStation.value = data.station || '';
-      fVolume.value = data.volume != null ? data.volume : '';
-      fUnit.value = data.volume_unit || 'L';
-      fPrice.value = data.price_per_unit != null ? data.price_per_unit : '';
-      rawText.textContent = data.raw_text || '';
-
-      currentConfidence = data.confidence || {};
-      setFieldConfidence('field-date', 'conf-date', currentConfidence.date);
-      setFieldConfidence('field-amount', 'conf-amount', currentConfidence.amount);
-      setFieldConfidence('field-station', 'conf-station', currentConfidence.station);
-      setFieldConfidence('field-volume', 'conf-volume', currentConfidence.volume);
-      setFieldConfidence('field-price', 'conf-price', currentConfidence.price_per_unit);
-
-      review.classList.add('show');
-      checkDuplicate();
+      fuelFDate.value = data.date || '';
+      fuelFAmount.value = data.amount != null ? data.amount.toFixed(2) : '';
+      fuelFStation.value = data.station || '';
+      fuelFVolume.value = data.volume != null ? data.volume : '';
+      fuelFUnit.value = data.volume_unit || 'L';
+      fuelFPrice.value = data.price_per_unit != null ? data.price_per_unit : '';
+      fuelRawText.textContent = data.raw_text || '';
+      fuelConfidence = data.confidence || {};
+      setFieldConfidence('fuel-field-date', 'fuel-conf-date', fuelConfidence.date);
+      setFieldConfidence('fuel-field-amount', 'fuel-conf-amount', fuelConfidence.amount);
+      setFieldConfidence('fuel-field-station', 'fuel-conf-station', fuelConfidence.station);
+      setFieldConfidence('fuel-field-volume', 'fuel-conf-volume', fuelConfidence.volume);
+      setFieldConfidence('fuel-field-price', 'fuel-conf-price', fuelConfidence.price_per_unit);
+      fuelReview.classList.add('show');
+      checkFuelDuplicate();
     } catch (e) {
-      alert('Could not read that receipt. Try again or enter the details manually.');
-      review.classList.add('show');
+      alert('Could not read that receipt. Enter details manually.');
+      fuelReview.classList.add('show');
     } finally {
-      scanStatus.classList.remove('show');
+      fuelScanStatus.classList.remove('show');
     }
   });
 
-  document.getElementById('retake-btn').addEventListener('click', () => {
-    photoInput.value = '';
-    review.classList.remove('show');
-    scanBtnLabel.textContent = 'Scan a receipt';
+  document.getElementById('fuel-retake-btn').addEventListener('click', () => {
+    fuelPhotoInput.value = '';
+    fuelReview.classList.remove('show');
+    fuelScanLabel.textContent = 'Scan a fuel receipt';
   });
 
-  document.getElementById('save-btn').addEventListener('click', async () => {
-    const file = photoInput.files[0];
-    if (!fDate.value || !fAmount.value) {
-      alert('Enter both a date and an amount before saving.');
-      return;
-    }
+  document.getElementById('fuel-save-btn').addEventListener('click', async () => {
+    if (!fuelFDate.value || !fuelFAmount.value) { alert('Enter both a date and an amount.'); return; }
+    const file = fuelPhotoInput.files[0];
     const formData = new FormData();
     if (file) formData.append('receipt', file);
-    formData.append('date', fDate.value);
-    formData.append('amount', fAmount.value);
-    formData.append('station', fStation.value);
-    formData.append('volume', fVolume.value);
-    formData.append('volume_unit', fUnit.value);
-    formData.append('price_per_unit', fPrice.value);
-    formData.append('raw_text', rawText.textContent);
-    formData.append('confidence', JSON.stringify(currentConfidence));
+    formData.append('vehicle_id', vehicleId);
+    formData.append('date', fuelFDate.value);
+    formData.append('amount', fuelFAmount.value);
+    formData.append('station', fuelFStation.value);
+    formData.append('volume', fuelFVolume.value);
+    formData.append('volume_unit', fuelFUnit.value);
+    formData.append('price_per_unit', fuelFPrice.value);
+    formData.append('odometer', document.getElementById('fuel-f-odometer').value);
+    formData.append('payment_method_id', document.getElementById('fuel-f-payment').value);
+    formData.append('raw_text', fuelRawText.textContent);
+    formData.append('confidence', JSON.stringify(fuelConfidence));
 
-    const saveBtn = document.getElementById('save-btn');
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving…';
+    const btn = document.getElementById('fuel-save-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
     try {
-      const res = await fetch('/save', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('save failed');
-      photoInput.value = '';
-      review.classList.remove('show');
-      scanBtnLabel.textContent = 'Scan a receipt';
-      await refreshReceipts();
-    } catch (e) {
-      alert('Could not save this receipt. Please try again.');
-    } finally {
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Save';
-    }
+      const res = await fetch('/save/fuel', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error();
+      fuelPhotoInput.value = '';
+      fuelReview.classList.remove('show');
+      fuelScanLabel.textContent = 'Scan a fuel receipt';
+      await loadFuel();
+    } catch (e) { alert('Could not save. Please try again.'); }
+    finally { btn.disabled = false; btn.textContent = 'Save'; }
   });
 
-  function matchesSearch(r, q) {
+  function fuelMatchesSearch(r, q) {
     if (!q) return true;
     q = q.toLowerCase();
-    return (r.station || '').toLowerCase().includes(q) ||
-           r.date.includes(q) ||
-           r.amount.toFixed(2).includes(q);
+    return (r.station || '').toLowerCase().includes(q) || r.date.includes(q) || r.amount.toFixed(2).includes(q);
   }
-
-  function visibleReceipts() {
-    const q = document.getElementById('search-input').value.trim();
-    const arr = currentReceipts.filter(r => matchesSearch(r, q));
-    arr.sort((a, b) => {
+  function fuelLowConfidence(r) {
+    const c = r.confidence || {};
+    return ['low', 'none'].includes(c.date) || ['low', 'none'].includes(c.amount);
+  }
+  function renderFuelTable() {
+    const q = document.getElementById('fuel-search-input').value.trim();
+    const rows = fuelLogs.filter(r => fuelMatchesSearch(r, q)).sort((a, b) => {
       const av = sortState.key === 'amount' ? a.amount : a.date;
       const bv = sortState.key === 'amount' ? b.amount : b.date;
       const cmp = av < bv ? -1 : av > bv ? 1 : 0;
       return sortState.dir === 'asc' ? cmp : -cmp;
     });
-    return arr;
-  }
-
-  function lowConfidence(r) {
-    const c = r.confidence || {};
-    return ['low', 'none'].includes(c.date) || ['low', 'none'].includes(c.amount);
-  }
-
-  function renderTable() {
-    const tbody = document.getElementById('table-body');
-    const table = document.getElementById('table');
-    const empty = document.getElementById('empty-state');
-    const rows = visibleReceipts();
-
-    if (!currentReceipts.length) {
-      table.style.display = 'none';
-      empty.style.display = 'block';
-      empty.textContent = 'No receipts yet — scan one above to get started.';
-      return;
-    }
-    if (!rows.length) {
-      table.style.display = 'none';
-      empty.style.display = 'block';
-      empty.textContent = 'No receipts match your search.';
-      return;
-    }
-    table.style.display = 'table';
-    empty.style.display = 'none';
-
-    tbody.innerHTML = rows.map(r => `
-      <tr data-id="${r.id}">
-        <td>${r.date}${lowConfidence(r) ? '<span class="caution-dot" title="Low-confidence OCR — double check the original"></span>' : ''}</td>
+    const table = document.getElementById('fuel-table');
+    const empty = document.getElementById('fuel-empty-state');
+    if (!rows.length) { table.style.display = 'none'; empty.style.display = 'block'; return; }
+    table.style.display = 'table'; empty.style.display = 'none';
+    document.getElementById('fuel-table-body').innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.date}${fuelLowConfidence(r) ? '<span class="caution-dot" title="Low-confidence OCR"></span>' : ''}</td>
         <td class="amount">$${r.amount.toFixed(2)}</td>
         <td class="station-cell">${r.station ? r.station.replace(/[<>&]/g, '') : '-'}</td>
         <td>
           ${r.image_filename ? `<button class="view-btn" data-src="/receipts/${r.image_filename}">View</button>` : ''}
-          <button class="del-btn" data-id="${r.id}">Delete</button>
+          <button class="del-btn" data-id="${r.id}" data-type="fuel">Delete</button>
         </td>
       </tr>
     `).join('');
-
-    tbody.querySelectorAll('.del-btn').forEach(btn => {
-      btn.addEventListener('click', () => deleteReceipt(btn.dataset.id));
-    });
-    tbody.querySelectorAll('.view-btn').forEach(btn => {
-      btn.addEventListener('click', () => openLightbox(btn.dataset.src));
-    });
+    wireRowButtons();
   }
-
-  document.querySelectorAll('th[data-sort]').forEach(th => {
+  document.querySelectorAll('#fuel-table th[data-sort]').forEach(th => {
     th.addEventListener('click', () => {
       const key = th.dataset.sort;
       sortState.dir = (sortState.key === key && sortState.dir === 'desc') ? 'asc' : 'desc';
       sortState.key = key;
-      renderTable();
+      renderFuelTable();
     });
   });
-  document.getElementById('search-input').addEventListener('input', renderTable);
+  document.getElementById('fuel-search-input').addEventListener('input', renderFuelTable);
 
+  async function loadFuel() {
+    const res = await fetch(`/api/fuel-logs?vehicle_id=${vehicleId}`);
+    const data = await res.json();
+    fuelLogs = data.logs;
+    const total = fuelLogs.reduce((s, r) => s + r.amount_cents, 0);
+    document.getElementById('total-value').textContent = centsToStr(total);
+    renderFuelTable();
+  }
+
+  // ================= MAINTENANCE =================
+  const maintPhotoInput = document.getElementById('maint-photo-input');
+  const maintScanStatus = document.getElementById('maint-scan-status');
+  const maintThumb = document.getElementById('maint-thumb');
+
+  document.getElementById('maint-f-category').addEventListener('change', (e) => {
+    document.getElementById('maint-field-other').style.display = e.target.value === 'Other' ? 'block' : 'none';
+  });
+
+  maintPhotoInput.addEventListener('change', async () => {
+    const file = maintPhotoInput.files[0];
+    if (!file) return;
+    maintThumb.src = URL.createObjectURL(file);
+    maintThumb.style.display = 'block';
+    maintScanStatus.classList.add('show');
+    const formData = new FormData();
+    formData.append('receipt', file);
+    try {
+      const res = await fetch('/scan', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.date) document.getElementById('maint-f-date').value = data.date;
+      if (data.amount != null) document.getElementById('maint-f-amount').value = data.amount.toFixed(2);
+    } catch (e) { /* manual entry still available */ }
+    finally { maintScanStatus.classList.remove('show'); }
+  });
+  document.getElementById('maint-retake-btn').addEventListener('click', () => {
+    maintPhotoInput.value = '';
+    maintThumb.style.display = 'none';
+  });
+
+  document.getElementById('maint-save-btn').addEventListener('click', async () => {
+    const dateVal = document.getElementById('maint-f-date').value;
+    const amountVal = document.getElementById('maint-f-amount').value;
+    if (!dateVal || !amountVal) { alert('Enter both a date and a cost.'); return; }
+    const file = maintPhotoInput.files[0];
+    const formData = new FormData();
+    if (file) formData.append('receipt', file);
+    formData.append('vehicle_id', vehicleId);
+    formData.append('date', dateVal);
+    formData.append('amount', amountVal);
+    formData.append('shop', document.getElementById('maint-f-shop').value);
+    formData.append('odometer', document.getElementById('maint-f-odometer').value);
+    formData.append('category', document.getElementById('maint-f-category').value);
+    formData.append('category_other', document.getElementById('maint-f-category-other').value);
+    formData.append('payment_method_id', document.getElementById('maint-f-payment').value);
+    formData.append('notes', document.getElementById('maint-f-notes').value);
+
+    const btn = document.getElementById('maint-save-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const res = await fetch('/save/maintenance', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error();
+      maintPhotoInput.value = '';
+      maintThumb.style.display = 'none';
+      ['maint-f-date', 'maint-f-amount', 'maint-f-shop', 'maint-f-odometer', 'maint-f-notes', 'maint-f-category-other'].forEach(id => document.getElementById(id).value = '');
+      await loadMaintenance();
+    } catch (e) { alert('Could not save. Please try again.'); }
+    finally { btn.disabled = false; btn.textContent = 'Save'; }
+  });
+
+  async function loadMaintenance() {
+    const res = await fetch(`/api/maintenance-logs?vehicle_id=${vehicleId}`);
+    const data = await res.json();
+    const table = document.getElementById('maint-table');
+    const empty = document.getElementById('maint-empty-state');
+    if (!data.logs.length) { table.style.display = 'none'; empty.style.display = 'block'; return; }
+    table.style.display = 'table'; empty.style.display = 'none';
+    document.getElementById('maint-table-body').innerHTML = data.logs.map(r => `
+      <tr>
+        <td>${r.date}</td>
+        <td>${(r.category_other || r.category)}</td>
+        <td class="amount">$${r.amount.toFixed(2)}</td>
+        <td>${r.shop || '-'}</td>
+        <td>
+          ${r.image_filename ? `<button class="view-btn" data-src="/receipts/${r.image_filename}">View</button>` : ''}
+          <button class="del-btn" data-id="${r.id}" data-type="maintenance">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+    wireRowButtons();
+  }
+
+  // ================= ODOMETER =================
+  document.getElementById('odo-save-btn').addEventListener('click', async () => {
+    const dateVal = document.getElementById('odo-f-date').value;
+    const reading = document.getElementById('odo-f-reading').value;
+    if (!dateVal || !reading) { alert('Enter both a date and an odometer reading.'); return; }
+    const res = await fetch('/save/odometer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vehicle_id: vehicleId, date: dateVal, odometer: reading, note: document.getElementById('odo-f-note').value }),
+    });
+    if (res.ok) {
+      document.getElementById('odo-f-reading').value = '';
+      document.getElementById('odo-f-note').value = '';
+      await loadOdometer();
+    } else alert('Could not save checkpoint.');
+  });
+
+  async function loadOdometer() {
+    const res = await fetch(`/api/odometer-logs?vehicle_id=${vehicleId}`);
+    const data = await res.json();
+    const table = document.getElementById('odo-table');
+    const empty = document.getElementById('odo-empty-state');
+    if (!data.logs.length) { table.style.display = 'none'; empty.style.display = 'block'; return; }
+    table.style.display = 'table'; empty.style.display = 'none';
+    document.getElementById('odo-table-body').innerHTML = data.logs.map(r => `
+      <tr><td>${r.date}</td><td>${r.odometer}</td><td>${r.note || '-'}</td>
+      <td><button class="del-btn" data-id="${r.id}" data-type="odometer">Delete</button></td></tr>
+    `).join('');
+    wireRowButtons();
+  }
+
+  // ================= Shared: delete + lightbox =================
+  function wireRowButtons() {
+    document.querySelectorAll('.del-btn').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('Delete this entry?')) return;
+        await fetch(`/delete/${btn.dataset.type}/${btn.dataset.id}`, { method: 'POST' });
+        if (btn.dataset.type === 'fuel') loadFuel();
+        else if (btn.dataset.type === 'maintenance') loadMaintenance();
+        else loadOdometer();
+      };
+    });
+    document.querySelectorAll('.view-btn').forEach(btn => {
+      btn.onclick = () => openLightbox(btn.dataset.src);
+    });
+  }
   function openLightbox(src) {
     document.getElementById('lightbox-img').src = src;
     document.getElementById('lightbox').classList.add('show');
   }
-  function closeLightbox() {
-    document.getElementById('lightbox').classList.remove('show');
-  }
+  function closeLightbox() { document.getElementById('lightbox').classList.remove('show'); }
   document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
-  document.getElementById('lightbox').addEventListener('click', (e) => {
-    if (e.target.id === 'lightbox') closeLightbox();
-  });
-  thumb.addEventListener('click', () => { if (thumb.src) openLightbox(thumb.src); });
-
-  async function deleteReceipt(id) {
-    if (!confirm('Delete this receipt?')) return;
-    await fetch(`/delete/${id}`, { method: 'POST' });
-    await refreshReceipts();
-  }
-
-  async function refreshReceipts() {
-    const res = await fetch('/api/receipts');
-    const data = await res.json();
-    currentReceipts = data.receipts;
-    document.getElementById('total-value').textContent = '$' + data.total.toFixed(2);
-    document.getElementById('subtitle').textContent = `${currentReceipts.length} receipt${currentReceipts.length !== 1 ? 's' : ''} saved`;
-    renderTable();
-  }
+  document.getElementById('lightbox').addEventListener('click', (e) => { if (e.target.id === 'lightbox') closeLightbox(); });
+  fuelThumb.addEventListener('click', () => { if (fuelThumb.src) openLightbox(fuelThumb.src); });
 
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/static/sw.js').catch(() => {});
-    });
+    window.addEventListener('load', () => { navigator.serviceWorker.register('/static/sw.js').catch(() => {}); });
   }
 
-  renderTable();
+  async function loadAll() {
+    if (!vehicleId) return;
+    updateVehicleMeta();
+    await Promise.all([loadFuel(), loadMaintenance(), loadOdometer()]);
+  }
+
+  if (vehicleId) { loadPaymentMethods(); loadAll(); }
 </script>
 </body>
 </html>
