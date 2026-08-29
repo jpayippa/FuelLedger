@@ -84,6 +84,8 @@
   .field.conf-none input, .field.conf-none select { border-color: var(--critical); }
   .field.conf-none .conf-tag { visibility: visible; background: var(--critical-soft); color: var(--critical); }
   .unit-row { display: grid; grid-template-columns: 1fr 90px; gap: 0.5rem; }
+  .payment-hint { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; }
+  .payment-hint.matched { color: var(--good); }
 
   .dup-banner { display: none; align-items: center; gap: 0.5rem; background: var(--warning-soft); border: 1px solid var(--warning-soft); color: var(--warning); font-size: 0.82rem; font-weight: 600; padding: 0.6rem 0.8rem; border-radius: 10px; margin-bottom: 1rem; }
   .dup-banner.show { display: flex; }
@@ -196,7 +198,7 @@
               </div>
               <div class="field-row">
                 <div class="field"><label>Odometer</label><input type="number" id="fuel-f-odometer" step="1" min="0" placeholder="optional"></div>
-                <div class="field"><label>Payment method</label><select id="fuel-f-payment"><option value="">None</option></select></div>
+                <div class="field"><label>Payment method</label><select id="fuel-f-payment"><option value="">None</option></select><div class="payment-hint" id="fuel-payment-hint"></div></div>
               </div>
             </div>
           </div>
@@ -256,7 +258,7 @@
                     {% for c in maintenance_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
                   </select>
                 </div>
-                <div class="field"><label>Payment method</label><select id="maint-f-payment"><option value="">None</option></select></div>
+                <div class="field"><label>Payment method</label><select id="maint-f-payment"><option value="">None</option></select><div class="payment-hint" id="maint-payment-hint"></div></div>
               </div>
               <div class="field" id="maint-field-other" style="display:none;"><label>Describe (Other)</label><input type="text" id="maint-f-category-other"></div>
               <div class="field"><label>Notes</label><textarea id="maint-f-notes" rows="2" placeholder="optional"></textarea></div>
@@ -402,6 +404,28 @@
   fuelFDate.addEventListener('input', checkFuelDuplicate);
   fuelFAmount.addEventListener('input', checkFuelDuplicate);
 
+  function applyPaymentHint(data, selectId, hintId) {
+    const select = document.getElementById(selectId);
+    const hintEl = document.getElementById(hintId);
+    const hint = data.payment_hint || { method: null };
+
+    if (data.matched_payment_method_id) {
+      select.value = data.matched_payment_method_id;
+      const label = hint.method === 'cash' ? 'Cash' : (hint.brand ? `${hint.brand} ••••${hint.card_last4}` : `••••${hint.card_last4}`);
+      hintEl.textContent = `Detected ${label} — auto-selected`;
+      hintEl.classList.add('matched');
+    } else if (hint.method === 'card' && hint.card_last4) {
+      hintEl.textContent = `Detected ${hint.brand || 'card'} ••••${hint.card_last4} — no saved payment method matches. Add one in Manage.`;
+      hintEl.classList.remove('matched');
+    } else if (hint.method === 'cash') {
+      hintEl.textContent = `Detected cash — add a payment method named "Cash" to auto-select next time.`;
+      hintEl.classList.remove('matched');
+    } else {
+      hintEl.textContent = '';
+      hintEl.classList.remove('matched');
+    }
+  }
+
   fuelPhotoInput.addEventListener('change', async () => {
     const file = fuelPhotoInput.files[0];
     if (!file) return;
@@ -428,6 +452,7 @@
       setFieldConfidence('fuel-field-station', 'fuel-conf-station', fuelConfidence.station);
       setFieldConfidence('fuel-field-volume', 'fuel-conf-volume', fuelConfidence.volume);
       setFieldConfidence('fuel-field-price', 'fuel-conf-price', fuelConfidence.price_per_unit);
+      applyPaymentHint(data, 'fuel-f-payment', 'fuel-payment-hint');
       fuelReview.classList.add('show');
       checkFuelDuplicate();
     } catch (e) {
@@ -549,6 +574,7 @@
       const data = await res.json();
       if (data.date) document.getElementById('maint-f-date').value = data.date;
       if (data.amount != null) document.getElementById('maint-f-amount').value = data.amount.toFixed(2);
+      applyPaymentHint(data, 'maint-f-payment', 'maint-payment-hint');
     } catch (e) { /* manual entry still available */ }
     finally { maintScanStatus.classList.remove('show'); }
   });

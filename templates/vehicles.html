@@ -59,10 +59,12 @@
     <div class="section-label"><span>Add a payment method</span></div>
     <div class="card">
       <div class="form-grid">
-        <div class="field"><label>Name</label><input id="pm-name" placeholder="e.g. Visa"></div>
-        <div class="field"><label>Notes</label><input id="pm-notes" placeholder="optional"></div>
+        <div class="field"><label>Name</label><input id="pm-name" placeholder="e.g. Visa, Cash"></div>
+        <div class="field"><label>Card last 4 digits</label><input id="pm-last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="optional"></div>
       </div>
-      <button class="btn btn-primary" id="pm-add-btn" style="width:100%;">Add payment method</button>
+      <div class="field" style="margin-bottom:0.9rem;"><label>Notes</label><input id="pm-notes" placeholder="optional"></div>
+      <div class="empty" style="padding:0.5rem 0; text-align:left;">Tip: if a card's last 4 digits are set here, scanning a receipt showing that card will auto-select this payment method. Name one "Cash" to auto-select it for cash receipts.</div>
+      <button class="btn btn-primary" id="pm-add-btn" style="width:100%; margin-top:0.7rem;">Add payment method</button>
     </div>
 
     <div class="section-label"><span>Payment methods</span></div>
@@ -99,7 +101,10 @@
     if (!paymentMethods.length) { el.innerHTML = '<div class="empty">No payment methods yet.</div>'; return; }
     el.innerHTML = paymentMethods.map(p => `
       <div class="item-row ${p.is_archived ? 'archived' : ''}">
-        <div><div class="item-name">${p.name}</div><div class="item-meta">${p.notes || ''}</div></div>
+        <div>
+          <div class="item-name">${p.name}${p.card_last4 ? ' &bull;&bull;&bull;&bull;' + p.card_last4 : ''}</div>
+          <div class="item-meta">${p.notes || ''}</div>
+        </div>
         <div class="item-actions"><button data-id="${p.id}" class="archive-pm">${p.is_archived ? 'Unarchive' : 'Archive'}</button></div>
       </div>
     `).join('');
@@ -126,10 +131,12 @@
     if (!name) { alert('Enter a payment method name.'); return; }
     await fetch('/api/payment-methods', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, notes: document.getElementById('pm-notes').value }),
+      body: JSON.stringify({
+        name, notes: document.getElementById('pm-notes').value,
+        card_last4: document.getElementById('pm-last4').value,
+      }),
     });
-    document.getElementById('pm-name').value = '';
-    document.getElementById('pm-notes').value = '';
+    ['pm-name', 'pm-notes', 'pm-last4'].forEach(id => document.getElementById(id).value = '');
     await refreshPaymentMethods();
   });
 

@@ -26,7 +26,7 @@ LEGACY_RECEIPTS_COLUMNS = {
 }
 TABLE_COLUMN_MIGRATIONS = {
     "vehicles": {},
-    "payment_methods": {},
+    "payment_methods": {"card_last4": "TEXT"},
     "fuel_logs": {},
     "maintenance_logs": {},
     "odometer_logs": {},
@@ -288,11 +288,11 @@ def list_payment_methods(include_archived=False):
     return [dict(r) for r in rows]
 
 
-def insert_payment_method(name, notes):
+def insert_payment_method(name, notes, card_last4=None):
     conn = get_db()
     cur = conn.execute(
-        "INSERT INTO payment_methods (name, notes, is_archived, created_at) VALUES (?, ?, 0, ?)",
-        (name, notes, datetime.now(timezone.utc).isoformat()),
+        "INSERT INTO payment_methods (name, notes, card_last4, is_archived, created_at) VALUES (?, ?, ?, 0, ?)",
+        (name, notes, card_last4, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -305,6 +305,24 @@ def set_payment_method_archived(pm_id, archived):
     conn.execute("UPDATE payment_methods SET is_archived=? WHERE id=?", (1 if archived else 0, pm_id))
     conn.commit()
     conn.close()
+
+
+def find_payment_method_by_last4(last4):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM payment_methods WHERE card_last4 = ? AND is_archived = 0 LIMIT 1", (last4,)
+    ).fetchone()
+    conn.close()
+    return row["id"] if row else None
+
+
+def find_cash_payment_method():
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM payment_methods WHERE is_archived = 0 AND LOWER(name) LIKE '%cash%' LIMIT 1"
+    ).fetchone()
+    conn.close()
+    return row["id"] if row else None
 
 
 # ---- Fuel logs ----

@@ -41,6 +41,14 @@ _BOILERPLATE_LINE = re.compile(
     re.I,
 )
 
+CARD_LAST4_RE = re.compile(r"\*{2,}\s?(\d{4})\b")
+CARD_BRAND_RE = re.compile(r"\b(VISA|MASTERCARD|MASTER CARD|AMEX|AMERICAN EXPRESS|DISCOVER|DEBIT)\b", re.I)
+CASH_RE = re.compile(r"(?<!PRICE )(?<!DISCOUNT )\bCASH\b(?!\s*(PRICE|DISCOUNT|BACK))", re.I)
+_NON_CARD_ID_LINE = re.compile(
+    r"\b(terminal|trans(action)?\s*#?|store\s*#?|ref(erence)?\s*#?|auth\s*#?|seq\s*#?|invoice\s*#?)\b",
+    re.I,
+)
+
 
 def _otsu_threshold(img):
     hist = img.histogram()
@@ -176,6 +184,30 @@ def extract_price_per_unit(text):
     return value, confidence
 
 
+def extract_payment_hint(text):
+    candidates = []
+    for line in text.splitlines():
+        if _NON_CARD_ID_LINE.search(line):
+            continue
+        m = CARD_LAST4_RE.search(line)
+        if not m:
+            continue
+        brand_m = CARD_BRAND_RE.search(line) or CARD_BRAND_RE.search(text)
+        candidates.append((bool(CARD_BRAND_RE.search(line)), m.group(1), brand_m))
+
+    if candidates:
+        candidates.sort(key=lambda c: not c[0])  # prefer a match on a line naming the brand
+        _, last4, brand_m = candidates[0]
+        return {
+            "method": "card",
+            "card_last4": last4,
+            "brand": brand_m.group(1).title() if brand_m else None,
+        }
+    if CASH_RE.search(text):
+        return {"method": "cash", "card_last4": None, "brand": None}
+    return {"method": None, "card_last4": None, "brand": None}
+
+
 def parse_receipt(image):
     text = run_ocr(image)
 
@@ -184,6 +216,7 @@ def parse_receipt(image):
     station, station_conf = extract_station(text)
     volume, volume_unit, volume_conf = extract_volume_and_unit(text)
     price_per_unit, price_conf = extract_price_per_unit(text)
+    payment_hint = extract_payment_hint(text)
 
     return {
         "amount": amount,
@@ -192,6 +225,7 @@ def parse_receipt(image):
         "volume": volume,
         "volume_unit": volume_unit,
         "price_per_unit": price_per_unit,
+        "payment_hint": payment_hint,
         "raw_text": text,
         "confidence": {
             "amount": amount_conf,

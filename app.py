@@ -163,9 +163,13 @@ def api_delete_vehicle(vehicle_id):
 def api_payment_methods():
     if request.method == "POST":
         data = request.get_json(force=True)
+        card_last4 = (data.get("card_last4") or "").strip() or None
+        if card_last4 and (not card_last4.isdigit() or len(card_last4) != 4):
+            card_last4 = None
         pm_id = db.insert_payment_method(
             data.get("name", "").strip() or "Unnamed",
             (data.get("notes") or "").strip() or None,
+            card_last4=card_last4,
         )
         return jsonify({"id": pm_id})
     return jsonify({"payment_methods": db.list_payment_methods(include_archived=True)})
@@ -192,6 +196,14 @@ def scan():
         return jsonify({"error": "could not read image"}), 400
 
     result = ocr.parse_receipt(image)
+
+    payment_hint = result["payment_hint"]
+    matched_payment_method_id = None
+    if payment_hint["method"] == "card" and payment_hint["card_last4"]:
+        matched_payment_method_id = db.find_payment_method_by_last4(payment_hint["card_last4"])
+    elif payment_hint["method"] == "cash":
+        matched_payment_method_id = db.find_cash_payment_method()
+
     return jsonify({
         "amount": result["amount"],
         "date": result["date"].isoformat() if result["date"] else None,
@@ -201,6 +213,8 @@ def scan():
         "price_per_unit": result["price_per_unit"],
         "raw_text": result["raw_text"],
         "confidence": result["confidence"],
+        "payment_hint": payment_hint,
+        "matched_payment_method_id": matched_payment_method_id,
     })
 
 
