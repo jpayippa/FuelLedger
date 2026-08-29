@@ -3,87 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d0d0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gas Tracker">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<link rel="icon" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/theme.css">
 <title>Gas Receipt Tracker</title>
 <style>
-  :root {
-    --page:        #0d0d0d;
-    --surface:     #1a1a19;
-    --surface-2:   #212120;
-    --border:      rgba(255,255,255,0.10);
-    --border-soft: rgba(255,255,255,0.06);
-    --text-primary:   #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted:     #898781;
-    --accent:      #3987e5;
-    --accent-soft: rgba(57,135,229,0.12);
-    --good:        #0ca30c;
-    --good-soft:   rgba(12,163,12,0.14);
-    --warning:     #fab219;
-    --warning-soft: rgba(250,178,25,0.14);
-    --critical:    #e66767;
-    --critical-soft: rgba(230,103,103,0.14);
-  }
-
-  * { box-sizing: border-box; }
-
-  body {
-    margin: 0;
-    min-height: 100vh;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    background:
-      radial-gradient(1100px 500px at 12% -10%, rgba(57,135,229,0.14), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgba(12,163,12,0.08), transparent 55%),
-      var(--page);
-    color: var(--text-primary);
-    padding: 2.5rem clamp(1.25rem, 4vw, 3rem) 4rem;
-  }
-
-  .wrap { max-width: 760px; margin: 0 auto; }
-
-  header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1.75rem;
-  }
-  .title-block { display: flex; align-items: center; gap: 0.75rem; }
-  .logo {
-    width: 38px; height: 38px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent), #6da7ec);
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 18px rgba(57,135,229,0.35);
-    flex-shrink: 0;
-  }
-  .logo svg { width: 20px; height: 20px; }
-  h1 { font-size: 1.4rem; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
-  .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.15rem; }
-
-  .total-badge {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.4rem;
-    font-weight: 650;
-    background: var(--good-soft);
-    color: #37d637;
-    border: 1px solid rgba(12,163,12,0.25);
-    padding: 0.5rem 0.9rem;
-    border-radius: 999px;
-    font-size: 0.9rem;
-  }
-  .total-badge .n { font-size: 1.15rem; }
-
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    box-shadow: 0 20px 40px -20px rgba(0,0,0,0.5);
-    padding: 1.4rem;
-    margin-bottom: 1.5rem;
-  }
-
   .scan-btn {
     display: flex;
     align-items: center;
@@ -103,6 +32,20 @@
   .scan-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
   .scan-btn svg { width: 20px; height: 20px; color: var(--accent); }
   #photo-input { display: none; }
+
+  .total-badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-weight: 650;
+    background: var(--good-soft);
+    color: #37d637;
+    border: 1px solid rgba(12,163,12,0.25);
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+  }
+  .total-badge .n { font-size: 1.15rem; }
 
   .scan-status {
     display: none;
@@ -137,10 +80,14 @@
     object-fit: cover;
     border: 1px solid var(--border);
     background: var(--surface-2);
+    cursor: pointer;
   }
   .fields { display: flex; flex-direction: column; gap: 0.7rem; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
   .field label {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     font-size: 0.72rem;
     font-weight: 650;
     text-transform: uppercase;
@@ -148,7 +95,16 @@
     color: var(--text-muted);
     margin-bottom: 0.3rem;
   }
-  .field input {
+  .conf-tag {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    display: none;
+  }
+  .field input, .field select {
     width: 100%;
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -158,8 +114,29 @@
     padding: 0.55rem 0.7rem;
     outline: none;
   }
-  .field input:focus { border-color: var(--accent); }
-  .field input.warn { border-color: var(--warning); }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field.conf-low input, .field.conf-low select { border-color: var(--warning); }
+  .field.conf-low .conf-tag { display: inline-block; background: var(--warning-soft); color: var(--warning); }
+  .field.conf-none input, .field.conf-none select { border-color: var(--critical); }
+  .field.conf-none .conf-tag { display: inline-block; background: var(--critical-soft); color: var(--critical); }
+
+  .unit-row { display: grid; grid-template-columns: 1fr 90px; gap: 0.5rem; }
+
+  .dup-banner {
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--warning-soft);
+    border: 1px solid rgba(250,178,25,0.3);
+    color: var(--warning);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.6rem 0.8rem;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+  }
+  .dup-banner.show { display: flex; }
+  .dup-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
 
   details.raw {
     margin-bottom: 1rem;
@@ -180,38 +157,36 @@
   }
 
   .btn-row { display: flex; gap: 0.7rem; }
-  .btn {
-    flex: 1;
-    padding: 0.7rem;
-    border-radius: 10px;
-    border: none;
-    font-size: 0.9rem;
-    font-weight: 650;
-    cursor: pointer;
-  }
-  .btn-primary { background: var(--accent); color: white; }
-  .btn-primary:hover { background: #2f78d0; }
-  .btn-secondary { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
-  .btn-secondary:hover { background: rgba(255,255,255,0.06); }
+  .btn-row .btn { flex: 1; }
 
-  .section-label {
-    font-size: 0.75rem;
-    font-weight: 650;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    margin: 0 0 0.75rem 0.1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  .search-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; align-items: center; }
+  .search { flex: 1; position: relative; }
+  .search input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    padding: 0.65rem 0.9rem 0.65rem 2.2rem;
+    outline: none;
+    transition: border-color 0.15s ease;
   }
+  .search input:focus { border-color: var(--accent); }
+  .search svg {
+    position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%);
+    width: 15px; height: 15px; color: var(--text-muted);
+  }
+  .export-links { display: flex; gap: 0.6rem; }
   .export-link {
     color: var(--accent);
     text-decoration: none;
     font-weight: 600;
+    font-size: 0.82rem;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    white-space: nowrap;
   }
   .export-link:hover { text-decoration: underline; }
   .export-link svg { width: 14px; height: 14px; }
@@ -241,21 +216,54 @@
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover { background: rgba(255,255,255,0.03); }
   td.amount { color: var(--text-primary); font-weight: 600; }
-  td.thumb-cell a { color: var(--accent); font-size: 0.8rem; text-decoration: none; }
-  td.thumb-cell a:hover { text-decoration: underline; }
-  .del-btn {
+  .caution-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--warning);
+    margin-left: 0.4rem;
+  }
+  .view-btn, .del-btn {
     background: none;
     border: none;
-    color: var(--critical);
     cursor: pointer;
     font-size: 0.78rem;
     font-weight: 600;
     padding: 0.2rem 0.4rem;
   }
-  .del-btn:hover { text-decoration: underline; }
-  .empty { color: var(--text-muted); padding: 2.5rem 1rem; text-align: center; font-size: 0.9rem; }
+  .view-btn { color: var(--accent); }
+  .del-btn { color: var(--critical); }
+  .view-btn:hover, .del-btn:hover { text-decoration: underline; }
 
   .table-card { padding: 0; overflow: hidden; }
+
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  .lightbox.show { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+  .lightbox-close {
+    position: absolute;
+    top: 1.2rem; right: 1.2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+  }
+
+  @media (max-width: 640px) {
+    td.station-cell, th:nth-child(3) { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -276,8 +284,15 @@
           <div class="subtitle" id="subtitle">{{ receipts|length }} receipt{{ 's' if receipts|length != 1 else '' }} saved</div>
         </div>
       </div>
-      <div class="total-badge">Total <span class="n" id="total-value">${{ '%.2f'|format(total) }}</span></div>
+      <div class="nav-links">
+        <a class="nav-link active" href="/">Home</a>
+        <a class="nav-link" href="/analytics">Analytics</a>
+      </div>
     </header>
+
+    <div style="display:flex; justify-content:flex-end; margin-bottom: 1.25rem;">
+      <div class="total-badge">Total <span class="n" id="total-value">${{ '%.2f'|format(total) }}</span></div>
+    </div>
 
     <div class="card">
       <label class="scan-btn" for="photo-input">
@@ -294,16 +309,43 @@
       </div>
 
       <div class="review" id="review">
+        <div class="dup-banner" id="dup-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span id="dup-text"></span>
+        </div>
+
         <div class="review-grid">
           <img class="thumb" id="thumb" alt="Receipt preview">
           <div class="fields">
-            <div class="field">
-              <label for="f-date">Date</label>
-              <input type="date" id="f-date">
+            <div class="field-row">
+              <div class="field" id="field-date">
+                <label>Date <span class="conf-tag" id="conf-date"></span></label>
+                <input type="date" id="f-date">
+              </div>
+              <div class="field" id="field-amount">
+                <label>Amount ($) <span class="conf-tag" id="conf-amount"></span></label>
+                <input type="number" id="f-amount" step="0.01" min="0" max="999.99" placeholder="0.00">
+              </div>
             </div>
-            <div class="field">
-              <label for="f-amount">Amount ($)</label>
-              <input type="number" id="f-amount" step="0.01" min="0" max="999.99" placeholder="0.00">
+            <div class="field" id="field-station">
+              <label>Station <span class="conf-tag" id="conf-station"></span></label>
+              <input type="text" id="f-station" placeholder="e.g. Shell">
+            </div>
+            <div class="field-row">
+              <div class="field" id="field-volume">
+                <label>Volume <span class="conf-tag" id="conf-volume"></span></label>
+                <div class="unit-row">
+                  <input type="number" id="f-volume" step="0.001" min="0" max="500" placeholder="0.000">
+                  <select id="f-unit">
+                    <option value="L">L</option>
+                    <option value="gal">gal</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field" id="field-price">
+                <label>Price/Unit <span class="conf-tag" id="conf-price"></span></label>
+                <input type="number" id="f-price" step="0.001" min="0" max="10" placeholder="0.000">
+              </div>
             </div>
           </div>
         </div>
@@ -320,10 +362,23 @@
 
     <div class="section-label">
       <span>History</span>
-      <a class="export-link" href="/export.xlsx">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-        Export to Excel
-      </a>
+      <div class="export-links">
+        <a class="export-link" href="/export.xlsx">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Excel
+        </a>
+        <a class="export-link" href="/export.csv">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          CSV
+        </a>
+      </div>
+    </div>
+
+    <div class="search-row">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search-input" type="text" placeholder="Search by station, date, or amount…" autocomplete="off">
+      </div>
     </div>
 
     <div class="card table-card">
@@ -332,23 +387,31 @@
           <tr>
             <th data-sort="date">Date</th>
             <th data-sort="amount">Amount</th>
-            <th>Receipt</th>
+            <th>Station</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="table-body">
           {% for r in receipts %}
           <tr data-id="{{ r.id }}">
-            <td>{{ r.date }}</td>
+            <td>{{ r.date }}{% if r.confidence and (r.confidence.get('date') in ['low','none'] or r.confidence.get('amount') in ['low','none']) %}<span class="caution-dot" title="Low-confidence OCR — double check the original"></span>{% endif %}</td>
             <td class="amount">${{ '%.2f'|format(r.amount) }}</td>
-            <td class="thumb-cell">{% if r.image_filename %}<a href="/receipts/{{ r.image_filename }}" target="_blank">View</a>{% else %}-{% endif %}</td>
-            <td><button class="del-btn" data-id="{{ r.id }}">Delete</button></td>
+            <td class="station-cell">{{ r.station or '-' }}</td>
+            <td>
+              {% if r.image_filename %}<button class="view-btn" data-src="/receipts/{{ r.image_filename }}">View</button>{% endif %}
+              <button class="del-btn" data-id="{{ r.id }}">Delete</button>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
       <div class="empty" id="empty-state" style="display: {{ 'block' if not receipts else 'none' }}">No receipts yet — scan one above to get started.</div>
     </div>
+  </div>
+
+  <div class="lightbox" id="lightbox">
+    <button class="lightbox-close" id="lightbox-close">&times;</button>
+    <img id="lightbox-img" alt="Full-size receipt">
   </div>
 
 <script>
@@ -358,11 +421,41 @@
   const thumb = document.getElementById('thumb');
   const fDate = document.getElementById('f-date');
   const fAmount = document.getElementById('f-amount');
+  const fStation = document.getElementById('f-station');
+  const fVolume = document.getElementById('f-volume');
+  const fUnit = document.getElementById('f-unit');
+  const fPrice = document.getElementById('f-price');
   const rawText = document.getElementById('raw-text');
   const scanBtnLabel = document.getElementById('scan-btn-label');
+  const dupBanner = document.getElementById('dup-banner');
+  const dupText = document.getElementById('dup-text');
 
   let sortState = { key: 'date', dir: 'desc' };
   let currentReceipts = {{ receipts|tojson }};
+  let currentConfidence = {};
+
+  function setFieldConfidence(fieldId, confId, level) {
+    const field = document.getElementById(fieldId);
+    const tag = document.getElementById(confId);
+    field.classList.remove('conf-low', 'conf-none');
+    if (level === 'low') { field.classList.add('conf-low'); tag.textContent = 'check'; }
+    else if (level === 'none') { field.classList.add('conf-none'); tag.textContent = 'missing'; }
+    else { tag.textContent = ''; }
+  }
+
+  function checkDuplicate() {
+    const d = fDate.value, a = parseFloat(fAmount.value);
+    if (!d || isNaN(a)) { dupBanner.classList.remove('show'); return; }
+    const match = currentReceipts.find(r => r.date === d && Math.abs(r.amount - a) < 0.01);
+    if (match) {
+      dupText.textContent = `Possible duplicate: a $${match.amount.toFixed(2)} receipt from ${match.date} already exists.`;
+      dupBanner.classList.add('show');
+    } else {
+      dupBanner.classList.remove('show');
+    }
+  }
+  fDate.addEventListener('input', checkDuplicate);
+  fAmount.addEventListener('input', checkDuplicate);
 
   photoInput.addEventListener('change', async () => {
     const file = photoInput.files[0];
@@ -381,10 +474,21 @@
       const data = await res.json();
       fDate.value = data.date || '';
       fAmount.value = data.amount != null ? data.amount.toFixed(2) : '';
-      fDate.classList.toggle('warn', !data.date);
-      fAmount.classList.toggle('warn', data.amount == null);
+      fStation.value = data.station || '';
+      fVolume.value = data.volume != null ? data.volume : '';
+      fUnit.value = data.volume_unit || 'L';
+      fPrice.value = data.price_per_unit != null ? data.price_per_unit : '';
       rawText.textContent = data.raw_text || '';
+
+      currentConfidence = data.confidence || {};
+      setFieldConfidence('field-date', 'conf-date', currentConfidence.date);
+      setFieldConfidence('field-amount', 'conf-amount', currentConfidence.amount);
+      setFieldConfidence('field-station', 'conf-station', currentConfidence.station);
+      setFieldConfidence('field-volume', 'conf-volume', currentConfidence.volume);
+      setFieldConfidence('field-price', 'conf-price', currentConfidence.price_per_unit);
+
       review.classList.add('show');
+      checkDuplicate();
     } catch (e) {
       alert('Could not read that receipt. Try again or enter the details manually.');
       review.classList.add('show');
@@ -409,7 +513,12 @@
     if (file) formData.append('receipt', file);
     formData.append('date', fDate.value);
     formData.append('amount', fAmount.value);
+    formData.append('station', fStation.value);
+    formData.append('volume', fVolume.value);
+    formData.append('volume_unit', fUnit.value);
+    formData.append('price_per_unit', fPrice.value);
     formData.append('raw_text', rawText.textContent);
+    formData.append('confidence', JSON.stringify(currentConfidence));
 
     const saveBtn = document.getElementById('save-btn');
     saveBtn.disabled = true;
@@ -429,8 +538,17 @@
     }
   });
 
-  function sortedReceipts() {
-    const arr = [...currentReceipts];
+  function matchesSearch(r, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return (r.station || '').toLowerCase().includes(q) ||
+           r.date.includes(q) ||
+           r.amount.toFixed(2).includes(q);
+  }
+
+  function visibleReceipts() {
+    const q = document.getElementById('search-input').value.trim();
+    const arr = currentReceipts.filter(r => matchesSearch(r, q));
     arr.sort((a, b) => {
       const av = sortState.key === 'amount' ? a.amount : a.date;
       const bv = sortState.key === 'amount' ? b.amount : b.date;
@@ -440,30 +558,49 @@
     return arr;
   }
 
+  function lowConfidence(r) {
+    const c = r.confidence || {};
+    return ['low', 'none'].includes(c.date) || ['low', 'none'].includes(c.amount);
+  }
+
   function renderTable() {
     const tbody = document.getElementById('table-body');
     const table = document.getElementById('table');
     const empty = document.getElementById('empty-state');
+    const rows = visibleReceipts();
 
     if (!currentReceipts.length) {
       table.style.display = 'none';
       empty.style.display = 'block';
+      empty.textContent = 'No receipts yet — scan one above to get started.';
+      return;
+    }
+    if (!rows.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      empty.textContent = 'No receipts match your search.';
       return;
     }
     table.style.display = 'table';
     empty.style.display = 'none';
 
-    tbody.innerHTML = sortedReceipts().map(r => `
+    tbody.innerHTML = rows.map(r => `
       <tr data-id="${r.id}">
-        <td>${r.date}</td>
+        <td>${r.date}${lowConfidence(r) ? '<span class="caution-dot" title="Low-confidence OCR — double check the original"></span>' : ''}</td>
         <td class="amount">$${r.amount.toFixed(2)}</td>
-        <td class="thumb-cell">${r.image_filename ? `<a href="/receipts/${r.image_filename}" target="_blank">View</a>` : '-'}</td>
-        <td><button class="del-btn" data-id="${r.id}">Delete</button></td>
+        <td class="station-cell">${r.station ? r.station.replace(/[<>&]/g, '') : '-'}</td>
+        <td>
+          ${r.image_filename ? `<button class="view-btn" data-src="/receipts/${r.image_filename}">View</button>` : ''}
+          <button class="del-btn" data-id="${r.id}">Delete</button>
+        </td>
       </tr>
     `).join('');
 
     tbody.querySelectorAll('.del-btn').forEach(btn => {
       btn.addEventListener('click', () => deleteReceipt(btn.dataset.id));
+    });
+    tbody.querySelectorAll('.view-btn').forEach(btn => {
+      btn.addEventListener('click', () => openLightbox(btn.dataset.src));
     });
   }
 
@@ -475,6 +612,20 @@
       renderTable();
     });
   });
+  document.getElementById('search-input').addEventListener('input', renderTable);
+
+  function openLightbox(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.add('show');
+  }
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('show');
+  }
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox').addEventListener('click', (e) => {
+    if (e.target.id === 'lightbox') closeLightbox();
+  });
+  thumb.addEventListener('click', () => { if (thumb.src) openLightbox(thumb.src); });
 
   async function deleteReceipt(id) {
     if (!confirm('Delete this receipt?')) return;
@@ -489,6 +640,12 @@
     document.getElementById('total-value').textContent = '$' + data.total.toFixed(2);
     document.getElementById('subtitle').textContent = `${currentReceipts.length} receipt${currentReceipts.length !== 1 ? 's' : ''} saved`;
     renderTable();
+  }
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    });
   }
 
   renderTable();
