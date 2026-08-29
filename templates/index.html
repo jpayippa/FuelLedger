@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gas Receipt Tracker</title>
+<style>
+  :root {
+    --page:        #0d0d0d;
+    --surface:     #1a1a19;
+    --surface-2:   #212120;
+    --border:      rgba(255,255,255,0.10);
+    --border-soft: rgba(255,255,255,0.06);
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --accent:      #3987e5;
+    --accent-soft: rgba(57,135,229,0.12);
+    --good:        #0ca30c;
+    --good-soft:   rgba(12,163,12,0.14);
+    --warning:     #fab219;
+    --warning-soft: rgba(250,178,25,0.14);
+    --critical:    #e66767;
+    --critical-soft: rgba(230,103,103,0.14);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(1100px 500px at 12% -10%, rgba(57,135,229,0.14), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(12,163,12,0.08), transparent 55%),
+      var(--page);
+    color: var(--text-primary);
+    padding: 2.5rem clamp(1.25rem, 4vw, 3rem) 4rem;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.75rem;
+  }
+  .title-block { display: flex; align-items: center; gap: 0.75rem; }
+  .logo {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #6da7ec);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 18px rgba(57,135,229,0.35);
+    flex-shrink: 0;
+  }
+  .logo svg { width: 20px; height: 20px; }
+  h1 { font-size: 1.4rem; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+  .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.15rem; }
+
+  .total-badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-weight: 650;
+    background: var(--good-soft);
+    color: #37d637;
+    border: 1px solid rgba(12,163,12,0.25);
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+  }
+  .total-badge .n { font-size: 1.15rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 20px 40px -20px rgba(0,0,0,0.5);
+    padding: 1.4rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .scan-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1.5px dashed var(--border);
+    background: var(--surface-2);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .scan-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .scan-btn svg { width: 20px; height: 20px; color: var(--accent); }
+  #photo-input { display: none; }
+
+  .scan-status {
+    display: none;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 0.9rem;
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .review { display: none; margin-top: 1.2rem; }
+  .review.show { display: block; }
+  .scan-status.show { display: flex; }
+
+  .review-grid {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .thumb {
+    width: 96px; height: 96px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .fields { display: flex; flex-direction: column; gap: 0.7rem; }
+  .field label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.3rem;
+  }
+  .field input {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    padding: 0.55rem 0.7rem;
+    outline: none;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field input.warn { border-color: var(--warning); }
+
+  details.raw {
+    margin-bottom: 1rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+  details.raw summary { cursor: pointer; user-select: none; }
+  details.raw pre {
+    white-space: pre-wrap;
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 0.7rem;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+
+  .btn-row { display: flex; gap: 0.7rem; }
+  .btn {
+    flex: 1;
+    padding: 0.7rem;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.9rem;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2f78d0; }
+  .btn-secondary { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.06); }
+
+  .section-label {
+    font-size: 0.75rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 0.75rem 0.1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .export-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .export-link:hover { text-decoration: underline; }
+  .export-link svg { width: 14px; height: 14px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  thead th:hover { color: var(--text-secondary); }
+  tbody td {
+    padding: 0.75rem 1rem;
+    font-size: 0.88rem;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--text-secondary);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  td.amount { color: var(--text-primary); font-weight: 600; }
+  td.thumb-cell a { color: var(--accent); font-size: 0.8rem; text-decoration: none; }
+  td.thumb-cell a:hover { text-decoration: underline; }
+  .del-btn {
+    background: none;
+    border: none;
+    color: var(--critical);
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.2rem 0.4rem;
+  }
+  .del-btn:hover { text-decoration: underline; }
+  .empty { color: var(--text-muted); padding: 2.5rem 1rem; text-align: center; font-size: 0.9rem; }
+
+  .table-card { padding: 0; overflow: hidden; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title-block">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 9V4a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v16h9"/>
+            <path d="M9 15h1"/>
+            <path d="M14 9h3l2.5 2.5V18a1 1 0 0 1-1 1H17"/>
+            <path d="M14 12h3"/>
+            <circle cx="17" cy="18.5" r="1"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Gas Receipt Tracker</h1>
+          <div class="subtitle" id="subtitle">{{ receipts|length }} receipt{{ 's' if receipts|length != 1 else '' }} saved</div>
+        </div>
+      </div>
+      <div class="total-badge">Total <span class="n" id="total-value">${{ '%.2f'|format(total) }}</span></div>
+    </header>
+
+    <div class="card">
+      <label class="scan-btn" for="photo-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <span id="scan-btn-label">Scan a receipt</span>
+      </label>
+      <input type="file" id="photo-input" accept="image/*" capture="environment">
+
+      <div class="scan-status" id="scan-status">
+        <span class="spinner"></span> Reading receipt…
+      </div>
+
+      <div class="review" id="review">
+        <div class="review-grid">
+          <img class="thumb" id="thumb" alt="Receipt preview">
+          <div class="fields">
+            <div class="field">
+              <label for="f-date">Date</label>
+              <input type="date" id="f-date">
+            </div>
+            <div class="field">
+              <label for="f-amount">Amount ($)</label>
+              <input type="number" id="f-amount" step="0.01" min="0" max="999.99" placeholder="0.00">
+            </div>
+          </div>
+        </div>
+        <details class="raw" id="raw-details">
+          <summary>Raw OCR text</summary>
+          <pre id="raw-text"></pre>
+        </details>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="retake-btn" type="button">Retake</button>
+          <button class="btn btn-primary" id="save-btn" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">
+      <span>History</span>
+      <a class="export-link" href="/export.xlsx">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        Export to Excel
+      </a>
+    </div>
+
+    <div class="card table-card">
+      <table id="table" style="display: {{ 'none' if not receipts else 'table' }}">
+        <thead>
+          <tr>
+            <th data-sort="date">Date</th>
+            <th data-sort="amount">Amount</th>
+            <th>Receipt</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          {% for r in receipts %}
+          <tr data-id="{{ r.id }}">
+            <td>{{ r.date }}</td>
+            <td class="amount">${{ '%.2f'|format(r.amount) }}</td>
+            <td class="thumb-cell">{% if r.image_filename %}<a href="/receipts/{{ r.image_filename }}" target="_blank">View</a>{% else %}-{% endif %}</td>
+            <td><button class="del-btn" data-id="{{ r.id }}">Delete</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="empty" id="empty-state" style="display: {{ 'block' if not receipts else 'none' }}">No receipts yet — scan one above to get started.</div>
+    </div>
+  </div>
+
+<script>
+  const photoInput = document.getElementById('photo-input');
+  const scanStatus = document.getElementById('scan-status');
+  const review = document.getElementById('review');
+  const thumb = document.getElementById('thumb');
+  const fDate = document.getElementById('f-date');
+  const fAmount = document.getElementById('f-amount');
+  const rawText = document.getElementById('raw-text');
+  const scanBtnLabel = document.getElementById('scan-btn-label');
+
+  let sortState = { key: 'date', dir: 'desc' };
+  let currentReceipts = {{ receipts|tojson }};
+
+  photoInput.addEventListener('change', async () => {
+    const file = photoInput.files[0];
+    if (!file) return;
+
+    thumb.src = URL.createObjectURL(file);
+    review.classList.remove('show');
+    scanStatus.classList.add('show');
+    scanBtnLabel.textContent = 'Scan another receipt';
+
+    const formData = new FormData();
+    formData.append('receipt', file);
+
+    try {
+      const res = await fetch('/scan', { method: 'POST', body: formData });
+      const data = await res.json();
+      fDate.value = data.date || '';
+      fAmount.value = data.amount != null ? data.amount.toFixed(2) : '';
+      fDate.classList.toggle('warn', !data.date);
+      fAmount.classList.toggle('warn', data.amount == null);
+      rawText.textContent = data.raw_text || '';
+      review.classList.add('show');
+    } catch (e) {
+      alert('Could not read that receipt. Try again or enter the details manually.');
+      review.classList.add('show');
+    } finally {
+      scanStatus.classList.remove('show');
+    }
+  });
+
+  document.getElementById('retake-btn').addEventListener('click', () => {
+    photoInput.value = '';
+    review.classList.remove('show');
+    scanBtnLabel.textContent = 'Scan a receipt';
+  });
+
+  document.getElementById('save-btn').addEventListener('click', async () => {
+    const file = photoInput.files[0];
+    if (!fDate.value || !fAmount.value) {
+      alert('Enter both a date and an amount before saving.');
+      return;
+    }
+    const formData = new FormData();
+    if (file) formData.append('receipt', file);
+    formData.append('date', fDate.value);
+    formData.append('amount', fAmount.value);
+    formData.append('raw_text', rawText.textContent);
+
+    const saveBtn = document.getElementById('save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    try {
+      const res = await fetch('/save', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('save failed');
+      photoInput.value = '';
+      review.classList.remove('show');
+      scanBtnLabel.textContent = 'Scan a receipt';
+      await refreshReceipts();
+    } catch (e) {
+      alert('Could not save this receipt. Please try again.');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+    }
+  });
+
+  function sortedReceipts() {
+    const arr = [...currentReceipts];
+    arr.sort((a, b) => {
+      const av = sortState.key === 'amount' ? a.amount : a.date;
+      const bv = sortState.key === 'amount' ? b.amount : b.date;
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return sortState.dir === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('table-body');
+    const table = document.getElementById('table');
+    const empty = document.getElementById('empty-state');
+
+    if (!currentReceipts.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = sortedReceipts().map(r => `
+      <tr data-id="${r.id}">
+        <td>${r.date}</td>
+        <td class="amount">$${r.amount.toFixed(2)}</td>
+        <td class="thumb-cell">${r.image_filename ? `<a href="/receipts/${r.image_filename}" target="_blank">View</a>` : '-'}</td>
+        <td><button class="del-btn" data-id="${r.id}">Delete</button></td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('.del-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteReceipt(btn.dataset.id));
+    });
+  }
+
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      sortState.dir = (sortState.key === key && sortState.dir === 'desc') ? 'asc' : 'desc';
+      sortState.key = key;
+      renderTable();
+    });
+  });
+
+  async function deleteReceipt(id) {
+    if (!confirm('Delete this receipt?')) return;
+    await fetch(`/delete/${id}`, { method: 'POST' });
+    await refreshReceipts();
+  }
+
+  async function refreshReceipts() {
+    const res = await fetch('/api/receipts');
+    const data = await res.json();
+    currentReceipts = data.receipts;
+    document.getElementById('total-value').textContent = '$' + data.total.toFixed(2);
+    document.getElementById('subtitle').textContent = `${currentReceipts.length} receipt${currentReceipts.length !== 1 ? 's' : ''} saved`;
+    renderTable();
+  }
+
+  renderTable();
+</script>
+</body>
+</html>
