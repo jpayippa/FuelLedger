@@ -14,9 +14,25 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.16.5
       - name: Run ruff
         run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Tesseract
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr
+      - name: Record Tesseract version
+        run: tesseract --version
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run tests with coverage
+        run: pytest --cov=. --cov-report=term-missing
 
   docker-build:
     runs-on: ubuntu-latest
@@ -24,3 +40,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build Docker image
         run: docker build -t fuelledger:ci .
+
+      - name: Start container for smoke test
+        run: |
+          docker run -d --name fuelledger-smoke -p 0:80 fuelledger:ci
+          echo "HOST_PORT=$(docker port fuelledger-smoke 80/tcp | cut -d: -f2)" >> "$GITHUB_ENV"
+
+      - name: Wait for container to answer on /
+        timeout-minutes: 2
+        run: |
+          until curl -sf "http://localhost:${HOST_PORT}/" -o /dev/null; do
+            sleep 2
+          done
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs fuelledger-smoke
+
+      - name: Stop and remove smoke-test container
+        if: always()
+        run: docker rm -f fuelledger-smoke

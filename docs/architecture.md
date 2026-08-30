@@ -54,9 +54,13 @@ This view powers both the per-vehicle timeline page and the mileage/cost-per-km 
 
 Additive, idempotent, never destructive:
 
-- New tables are created with `CREATE TABLE IF NOT EXISTS` on every boot.
-- New columns on existing tables are added via a `PRAGMA table_info` check + `ALTER TABLE ADD COLUMN`, only for columns that don't already exist — the same pattern used since the very first schema evolution of this project.
-- The legacy single-vehicle `receipts` table (from the pre-vehicle version of this app) is migrated once: a placeholder vehicle is created, every row is copied into `fuel_logs` attributed to it, and the original table is renamed to `receipts_v1_backup` rather than dropped. Each step is independently guarded (checking for `receipts_v1_backup`'s existence, checking `fuel_logs` row count) so the whole process safely no-ops on every subsequent boot and self-heals if interrupted mid-migration.
+- New tables are created with `CREATE TABLE IF NOT EXISTS` on every boot (`db._create_new_schema()`).
+- New columns on existing tables are added via a `PRAGMA table_info` check + `ALTER TABLE ADD COLUMN`, only for columns that don't already exist (`db.migrate_schema()`) — the same pattern used since the very first schema evolution of this project.
+- The legacy single-vehicle `receipts` table (from the pre-vehicle version of this app) is migrated once (`db.migrate_legacy_receipts()`): a placeholder "My Vehicle" is created if none exists, and every row is copied into `fuel_logs`.
+
+**Idempotency via a durable marker, not table emptiness.** Each copied row is tagged with `fuel_logs.legacy_receipt_id`, set to the original `receipts.id` — a stable, immutable key. Re-running the migration recomputes "which legacy rows are still pending" as *"every `receipts.id` not already present as a `legacy_receipt_id` in `fuel_logs`,"* rather than assuming "if `fuel_logs` has any rows, migration must already be done." That assumption is what an earlier version of this function got wrong: if `fuel_logs` ever had unrelated rows before the legacy table was migrated, the old code skipped copying entirely and renamed `receipts` away anyway, silently orphaning its rows. A partial unique index (`idx_fuel_logs_legacy_receipt_id`, created only after the column exists) is a hard backstop against ever double-importing the same legacy row.
+
+`receipts` is renamed to `receipts_v1_backup` only once every one of its rows is confirmed represented in `fuel_logs` (a fresh count, not an assumption), and never renamed over an existing `receipts_v1_backup` — if both tables somehow exist at once, the migration logs a diagnostic and leaves both untouched rather than guessing at a merge.
 
 ## OCR pipeline
 

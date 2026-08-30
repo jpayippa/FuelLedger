@@ -5,3 +5,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "ocr_integration: exercises the real Tesseract binary against synthetic fixture images (slower, environment-sensitive)",
+]

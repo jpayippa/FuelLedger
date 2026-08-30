@@ -10,3 +10,6 @@ venv/
 .vscode/
 .idea/
 *.log
+.coverage
+.pytest_cache/
+htmlcov/

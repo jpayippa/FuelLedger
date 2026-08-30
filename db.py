@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import sys
 from datetime import datetime, timezone
 
 DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
@@ -27,7 +28,7 @@ LEGACY_RECEIPTS_COLUMNS = {
 TABLE_COLUMN_MIGRATIONS = {
     "vehicles": {},
     "payment_methods": {"card_last4": "TEXT"},
-    "fuel_logs": {},
+    "fuel_logs": {"legacy_receipt_id": "INTEGER"},
     "maintenance_logs": {},
     "odometer_logs": {},
 }
@@ -42,6 +43,12 @@ def get_db():
 
 
 def init_db():
+    _create_new_schema()
+    migrate_schema()
+    migrate_legacy_receipts()
+
+
+def _create_new_schema():
     conn = get_db()
     conn.execute(
         """
@@ -143,9 +150,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-    migrate_schema()
-    migrate_legacy_receipts()
-
 
 def migrate_schema():
     conn = get_db()
@@ -154,18 +158,39 @@ def migrate_schema():
         for column, coltype in columns.items():
             if column not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+    # Only safe to create once the column above is guaranteed to exist.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_fuel_logs_legacy_receipt_id "
+        "ON fuel_logs(legacy_receipt_id) WHERE legacy_receipt_id IS NOT NULL"
+    )
     conn.commit()
     conn.close()
 
 
 def migrate_legacy_receipts():
+    """One-time import of the pre-vehicle `receipts` table into `fuel_logs`.
+
+    Each imported row is tagged with `legacy_receipt_id` (the original `receipts.id`,
+    a stable key) so re-running this function is safe: rows already imported are
+    identified by that tag rather than inferred from whether `fuel_logs` is empty,
+    which is what caused rows to go missing if `fuel_logs` ever had unrelated data
+    in it before the legacy table was migrated.
+    """
     conn = get_db()
     tables = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
-    if "receipts_v1_backup" in tables:
+    if "receipts" not in tables:
         conn.close()
         return
-    if "receipts" not in tables:
+
+    if "receipts_v1_backup" in tables:
+        # Both a legacy table and a completed backup exist at once - not a state
+        # normal operation produces. Don't guess at a merge; leave both alone.
+        print(
+            "FuelLedger: both 'receipts' and 'receipts_v1_backup' tables exist; "
+            "skipping legacy migration. Inspect the database manually.",
+            file=sys.stderr,
+        )
         conn.close()
         return
 
@@ -173,9 +198,15 @@ def migrate_legacy_receipts():
     for column, coltype in LEGACY_RECEIPTS_COLUMNS.items():
         if column not in legacy_cols:
             conn.execute(f"ALTER TABLE receipts ADD COLUMN {column} {coltype}")
+    conn.commit()
 
-    fuel_log_count = conn.execute("SELECT COUNT(*) AS c FROM fuel_logs").fetchone()["c"]
-    if fuel_log_count == 0:
+    already_migrated_ids = {
+        r["legacy_receipt_id"]
+        for r in conn.execute("SELECT legacy_receipt_id FROM fuel_logs WHERE legacy_receipt_id IS NOT NULL")
+    }
+    pending_rows = [r for r in conn.execute("SELECT * FROM receipts").fetchall() if r["id"] not in already_migrated_ids]
+
+    if pending_rows:
         vehicle_count = conn.execute("SELECT COUNT(*) AS c FROM vehicles").fetchone()["c"]
         now = datetime.now(timezone.utc).isoformat()
         if vehicle_count == 0:
@@ -187,21 +218,26 @@ def migrate_legacy_receipts():
         else:
             default_vehicle_id = conn.execute("SELECT id FROM vehicles ORDER BY id LIMIT 1").fetchone()["id"]
 
-        for r in conn.execute("SELECT * FROM receipts").fetchall():
+        for r in pending_rows:
             conn.execute(
                 "INSERT INTO fuel_logs "
                 "(vehicle_id, payment_method_id, date, amount_cents, odometer, station, "
                 " volume, volume_unit, price_per_unit, image_filename, raw_ocr_text, "
-                " confidence_json, created_at) "
-                "VALUES (?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " confidence_json, legacy_receipt_id, created_at) "
+                "VALUES (?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (default_vehicle_id, r["date"], r["amount_cents"], r["station"], r["volume"],
                  r["volume_unit"], r["price_per_unit"], r["image_filename"], r["raw_ocr_text"],
-                 r["confidence_json"], r["created_at"]),
+                 r["confidence_json"], r["id"], r["created_at"]),
             )
         conn.commit()
 
-    conn.execute("ALTER TABLE receipts RENAME TO receipts_v1_backup")
-    conn.commit()
+    remaining = conn.execute(
+        "SELECT COUNT(*) AS c FROM receipts WHERE id NOT IN "
+        "(SELECT legacy_receipt_id FROM fuel_logs WHERE legacy_receipt_id IS NOT NULL)"
+    ).fetchone()["c"]
+    if remaining == 0:
+        conn.execute("ALTER TABLE receipts RENAME TO receipts_v1_backup")
+        conn.commit()
     conn.close()
 
 
