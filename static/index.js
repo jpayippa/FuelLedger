@@ -110,6 +110,17 @@ function applyPaymentHint(data, selectId, hintId) {
   }
 }
 
+function applyQualityWarnings(warnings, textId, bannerId) {
+  const banner = document.getElementById(bannerId);
+  const textEl = document.getElementById(textId);
+  if (warnings && warnings.length) {
+    textEl.textContent = warnings.join(' ');
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
 fuelPhotoInput.addEventListener('change', async () => {
   const file = fuelPhotoInput.files[0];
   if (!file) return;
@@ -145,6 +156,7 @@ fuelPhotoInput.addEventListener('change', async () => {
     setFieldConfidence('fuel-field-volume', 'fuel-conf-volume', fuelConfidence.volume);
     setFieldConfidence('fuel-field-price', 'fuel-conf-price', fuelConfidence.price_per_unit);
     applyPaymentHint(data, 'fuel-f-payment', 'fuel-payment-hint');
+    applyQualityWarnings(data.quality_warnings, 'fuel-quality-text', 'fuel-quality-banner');
     fuelReview.classList.add('show');
     checkFuelDuplicate();
   } catch (e) {
@@ -271,6 +283,7 @@ maintPhotoInput.addEventListener('change', async () => {
     if (data.date) document.getElementById('maint-f-date').value = data.date;
     if (data.amount != null) document.getElementById('maint-f-amount').value = data.amount.toFixed(2);
     applyPaymentHint(data, 'maint-f-payment', 'maint-payment-hint');
+    applyQualityWarnings(data.quality_warnings, 'maint-quality-text', 'maint-quality-banner');
   } catch (e) { /* manual entry still available */ }
   finally { maintScanStatus.classList.remove('show'); }
 });

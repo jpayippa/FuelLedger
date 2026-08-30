@@ -3,11 +3,14 @@ import re
 import threading
 from datetime import date, datetime
 
+import cv2
+import numpy as np
 import pytesseract
 from dateutil import parser as dateparser
 from PIL import Image, ImageFilter, ImageOps
 
 import crop
+import image_quality
 
 OCR_MAX_CONCURRENCY = int(os.environ.get("OCR_MAX_CONCURRENCY", "1"))
 OCR_SEMAPHORE_TIMEOUT_SECONDS = int(os.environ.get("OCR_SEMAPHORE_TIMEOUT_SECONDS", "30"))
@@ -83,9 +86,33 @@ def _otsu_threshold(img):
     return threshold
 
 
+def generate_preprocessing_variants(denoised_gray_image):
+    """Prepares a small number of cheap binarization candidates instead of
+    committing to one destructive threshold. Not yet tried in a cascade
+    (that's the next step of this hardening effort) - preprocess_for_ocr
+    still selects "otsu" today, so current OCR output is unchanged."""
+    variants = {"normalized": denoised_gray_image}
+
+    arr = np.array(denoised_gray_image)
+    adaptive = cv2.adaptiveThreshold(
+        arr, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 15
+    )
+    variants["adaptive"] = Image.fromarray(adaptive)
+
+    threshold = _otsu_threshold(denoised_gray_image)
+    otsu = denoised_gray_image.point(lambda p: 255 if p > threshold else 0)
+    variants["otsu"] = otsu
+
+    otsu_arr = np.array(otsu)
+    if (otsu_arr == 0).mean() > 0.6:
+        variants["inverted"] = Image.fromarray(255 - otsu_arr)
+
+    return variants
+
+
 def preprocess_for_ocr(image):
     img = ImageOps.exif_transpose(image)
-    img = crop.auto_crop(img)
+    img, was_cropped = crop.auto_crop(img)
     img = img.convert("L")
 
     w, h = img.size
@@ -97,20 +124,26 @@ def preprocess_for_ocr(image):
         scale = 1600 / max_dim
         img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
 
+    if not was_cropped:
+        img = crop.deskew(img)
+
+    quality_warnings = image_quality.assess_quality(img, was_cropped)
+
     img = crop.normalize_illumination(img)
     img = ImageOps.autocontrast(img, cutoff=1)
     img = img.filter(ImageFilter.MedianFilter(size=3))
-    threshold = _otsu_threshold(img)
-    img = img.point(lambda p: 255 if p > threshold else 0)
-    return img
+
+    variants = generate_preprocessing_variants(img)
+    return variants["otsu"], quality_warnings
 
 
 def run_ocr(image):
     if not _ocr_semaphore.acquire(timeout=OCR_SEMAPHORE_TIMEOUT_SECONDS):
         raise OcrBusyError("The server is busy processing another receipt. Please try again shortly.")
     try:
-        processed = preprocess_for_ocr(image)
-        return pytesseract.image_to_string(processed, lang="eng", config="--oem 3 --psm 6")
+        processed, quality_warnings = preprocess_for_ocr(image)
+        text = pytesseract.image_to_string(processed, lang="eng", config="--oem 3 --psm 6")
+        return text, quality_warnings
     finally:
         _ocr_semaphore.release()
 
@@ -225,7 +258,7 @@ def extract_payment_hint(text):
 
 
 def parse_receipt(image):
-    text = run_ocr(image)
+    text, quality_warnings = run_ocr(image)
 
     amount, amount_conf = extract_amount(text)
     txn_date, date_conf = extract_date(text)
@@ -243,6 +276,7 @@ def parse_receipt(image):
         "price_per_unit": price_per_unit,
         "payment_hint": payment_hint,
         "raw_text": text,
+        "quality_warnings": quality_warnings,
         "confidence": {
             "amount": amount_conf,
             "date": date_conf,

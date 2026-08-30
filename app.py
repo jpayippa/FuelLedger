@@ -235,6 +235,7 @@ def scan():
         "price_per_unit": result["price_per_unit"],
         "raw_text": result["raw_text"],
         "confidence": result["confidence"],
+        "quality_warnings": result.get("quality_warnings", []),
         "payment_hint": payment_hint,
         "matched_payment_method_id": matched_payment_method_id,
     })

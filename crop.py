@@ -1,6 +1,11 @@
+import os
+
 import cv2
 import numpy as np
 from PIL import Image
+
+CROP_MARGIN_RATIO = float(os.environ.get("CROP_MARGIN_RATIO", "0.04"))
+MAX_DESKEW_ANGLE = float(os.environ.get("MAX_DESKEW_ANGLE", "15"))
 
 
 def _order_corners(pts):
@@ -13,6 +18,18 @@ def _order_corners(pts):
     ordered[1] = pts[np.argmin(diff)]  # top-right
     ordered[3] = pts[np.argmax(diff)]  # bottom-left
     return ordered
+
+
+def _expand_corners(corners, image_shape, margin_ratio=CROP_MARGIN_RATIO):
+    """Pushes each corner outward from the quad's centroid by margin_ratio,
+    clipped to the source image bounds, so a slightly-too-tight detected
+    boundary doesn't permanently crop off edge characters."""
+    h, w = image_shape[:2]
+    center = corners.mean(axis=0)
+    expanded = center + (corners - center) * (1 + margin_ratio)
+    expanded[:, 0] = np.clip(expanded[:, 0], 0, w - 1)
+    expanded[:, 1] = np.clip(expanded[:, 1], 0, h - 1)
+    return expanded.astype("float32")
 
 
 def _warp(image_bgr, corners):
@@ -70,8 +87,13 @@ def find_receipt_corners(image_bgr):
 
 
 def auto_crop(pil_image):
-    """Detect a receipt's quadrilateral against its background and perspective-warp it flat.
+    """Detect a receipt's quadrilateral against its background and perspective-warp it flat,
+    with a small margin so a slightly-too-tight boundary doesn't crop off edge characters.
     Falls back to the original image untouched if no confident quadrilateral is found.
+
+    Returns (image, was_cropped) - was_cropped tells the caller whether the perspective
+    warp actually ran (and therefore already corrected any skew), so a fallback deskew
+    step knows whether it's still needed.
     """
     try:
         rgb = np.array(pil_image.convert("RGB"))
@@ -79,17 +101,52 @@ def auto_crop(pil_image):
 
         corners = find_receipt_corners(bgr)
         if corners is None:
-            return pil_image
+            return pil_image, False
 
         ordered = _order_corners(corners)
-        warped = _warp(bgr, ordered)
+        expanded = _expand_corners(ordered, bgr.shape)
+        warped = _warp(bgr, expanded)
         if warped is None:
-            return pil_image
+            return pil_image, False
 
         warped_rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
-        return Image.fromarray(warped_rgb)
+        return Image.fromarray(warped_rgb), True
     except Exception:
-        return pil_image
+        return pil_image, False
+
+
+def estimate_skew_angle(gray_pil_image):
+    """Estimates the rotation (degrees) needed to deskew an image that didn't go
+    through the perspective warp, via the minAreaRect of thresholded foreground
+    pixels - the standard lightweight deskew heuristic. Returns 0.0 if no
+    reasonable estimate can be made, or if the estimate exceeds MAX_DESKEW_ANGLE
+    (which more likely indicates noise than a genuinely rotated photo)."""
+    arr = np.array(gray_pil_image)
+    thresh = cv2.threshold(arr, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    coords = cv2.findNonZero(thresh)
+    if coords is None or len(coords) < 100:
+        return 0.0
+
+    # cv2.minAreaRect (this OpenCV version) returns an angle in [0, 90) for an
+    # axis-ish-aligned box; empirically, a small positive rotation applied to
+    # the source shows up as an angle just under 90, and a small negative
+    # rotation shows up as an angle just above 0. Map both back into a small
+    # signed correction (e.g. a raw 82 -> a small POSITIVE source rotation of
+    # 8, so we correct by rotating -8; a raw 8 -> a small NEGATIVE source
+    # rotation, corrected by rotating +8).
+    angle = cv2.minAreaRect(coords)[-1]
+    if angle > 45:
+        angle -= 90
+    return angle if abs(angle) <= MAX_DESKEW_ANGLE else 0.0
+
+
+def deskew(gray_pil_image):
+    """Rotates the image to correct small residual skew. A no-op (returns the
+    same image) if the estimated angle is negligible."""
+    angle = estimate_skew_angle(gray_pil_image)
+    if abs(angle) < 0.5:
+        return gray_pil_image
+    return gray_pil_image.rotate(angle, expand=True, fillcolor=255)
 
 
 def normalize_illumination(gray_pil_image):

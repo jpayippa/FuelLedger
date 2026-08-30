@@ -4,7 +4,8 @@ No real personal receipts are used or committed anywhere in this repo - every
 image these functions produce is generated at test time from plain text.
 """
 
-from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 _FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
@@ -14,6 +15,42 @@ def _font(size=24):
         return ImageFont.truetype(_FONT_PATH, size)
     except OSError:
         return ImageFont.load_default()
+
+
+def make_blurry(image, radius=8):
+    return image.filter(ImageFilter.GaussianBlur(radius))
+
+
+def make_dark(image, factor=0.15):
+    arr = np.array(image.convert("L")).astype("float32") * factor
+    return Image.fromarray(np.clip(arr, 0, 255).astype("uint8")).convert("RGB")
+
+
+def make_overexposed(image, factor=3.0, offset=150):
+    arr = np.array(image.convert("L")).astype("float32") * factor + offset
+    return Image.fromarray(np.clip(arr, 0, 255).astype("uint8")).convert("RGB")
+
+
+def make_realistic_receipt_photo(lines, receipt_size=(500, 700), canvas_size=(700, 900), background_gray=120):
+    """Unlike make_synthetic_receipt (a plain white canvas with no
+    surrounding background), this places the receipt on a contrasting
+    mid-gray background - giving crop.auto_crop an actual boundary to
+    detect, and keeping overall brightness moderate instead of overexposed.
+    Used specifically for testing "a normal photo produces no quality
+    warnings," where make_synthetic_receipt's plain-white full-frame style
+    would legitimately (and correctly) trip both the overexposed and
+    boundary-not-detected checks."""
+    canvas = Image.new("L", canvas_size, color=background_gray)
+    receipt = Image.new("L", receipt_size, color=250)
+    draw = ImageDraw.Draw(receipt)
+    font = _font(20)
+    y = 20
+    for line in lines:
+        draw.text((15, y), line, fill=10, font=font)
+        y += 30
+    offset = ((canvas_size[0] - receipt_size[0]) // 2, (canvas_size[1] - receipt_size[1]) // 2)
+    canvas.paste(receipt, offset)
+    return canvas.convert("RGB")
 
 
 def make_synthetic_receipt(lines, size=(600, 800)):
