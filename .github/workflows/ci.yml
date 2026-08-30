@@ -33,6 +33,10 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Run tests with coverage
         run: pytest --cov=. --cov-report=term-missing
+      - name: Check static/*.js syntax
+        run: for f in static/*.js; do node --check "$f"; done
+      - name: Run JS tests
+        run: node --test 'tests/js/**/*.test.mjs'
 
   docker-build:
     runs-on: ubuntu-latest

@@ -9,3 +9,8 @@ function toggleTheme() {
   document.documentElement.setAttribute("data-theme", next);
   localStorage.setItem("fuelledger-theme", next);
 }
+
+document.addEventListener("DOMContentLoaded", function () {
+  var btn = document.getElementById("theme-toggle-btn");
+  if (btn) btn.addEventListener("click", toggleTheme);
+});

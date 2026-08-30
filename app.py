@@ -14,6 +14,18 @@ app = Flask(__name__)
 db.init_db()
 
 
+@app.after_request
+def set_security_headers(response):
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 def cents_from_amount(amount_str, max_amount=999.99):
     amount = float(amount_str)
     if not (0 < amount <= max_amount):
