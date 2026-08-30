@@ -8,9 +8,12 @@ from PIL import Image
 
 import db
 import ocr
+import uploads
 from export import build_csv, build_workbook
+from uploads import ImageValidationError
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = uploads.MAX_UPLOAD_BYTES
 db.init_db()
 
 
@@ -24,6 +27,11 @@ def set_security_headers(response):
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["X-Frame-Options"] = "DENY"
     return response
+
+
+@app.errorhandler(413)
+def handle_upload_too_large(e):
+    return jsonify({"error": f"File too large. Maximum upload size is {uploads.MAX_UPLOAD_MB} MB."}), 413
 
 
 def cents_from_amount(amount_str, max_amount=999.99):
@@ -59,17 +67,17 @@ def optional_int(value):
 
 
 def save_uploaded_image(file):
-    if not file:
+    """Returns the saved filename, or None if no file was provided.
+    Raises ImageValidationError (never silently swallowed) if a file WAS
+    provided but failed validation."""
+    image = uploads.load_validated_image(file)
+    if image is None:
         return None
-    try:
-        image = Image.open(file.stream)
-        image = image.convert("RGB")
-        image.thumbnail((2000, 2000), Image.LANCZOS)
-        filename = f"{uuid.uuid4()}.jpg"
-        image.save(os.path.join(db.RECEIPTS_DIR, filename), "JPEG", quality=85)
-        return filename
-    except Exception:
-        return None
+    image = image.convert("RGB")
+    image.thumbnail((2000, 2000), Image.LANCZOS)
+    filename = f"{uuid.uuid4()}.jpg"
+    image.save(os.path.join(db.RECEIPTS_DIR, filename), "JPEG", quality=85)
+    return filename
 
 
 def fuel_logs_with_dollars(vehicle_id=None):
@@ -202,12 +210,14 @@ def scan():
     if not file:
         return jsonify({"error": "no file uploaded"}), 400
     try:
-        image = Image.open(file.stream)
-        image.load()
-    except Exception:
-        return jsonify({"error": "could not read image"}), 400
+        image = uploads.load_validated_image(file)
+    except ImageValidationError as e:
+        return jsonify({"error": str(e)}), 400
 
-    result = ocr.parse_receipt(image)
+    try:
+        result = ocr.parse_receipt(image)
+    except ocr.OcrBusyError as e:
+        return jsonify({"error": str(e)}), 503
 
     payment_hint = result["payment_hint"]
     matched_payment_method_id = None
@@ -252,20 +262,32 @@ def save_fuel():
     except ValueError:
         confidence = None
 
-    new_id = db.insert_fuel_log(
-        vehicle_id=vehicle_id,
-        payment_method_id=optional_int(request.form.get("payment_method_id")),
-        date_str=date_str,
-        amount_cents=amount_cents,
-        odometer=optional_float(request.form.get("odometer"), max_val=2_000_000),
-        station=request.form.get("station") or None,
-        volume=optional_float(request.form.get("volume"), max_val=500),
-        volume_unit=request.form.get("volume_unit") if request.form.get("volume_unit") in ("L", "gal") else None,
-        price_per_unit=optional_float(request.form.get("price_per_unit"), max_val=10),
-        image_filename=save_uploaded_image(file),
-        raw_text=request.form.get("raw_text", ""),
-        confidence=confidence,
-    )
+    try:
+        image_filename = save_uploaded_image(file)
+    except ImageValidationError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        new_id = db.insert_fuel_log(
+            vehicle_id=vehicle_id,
+            payment_method_id=optional_int(request.form.get("payment_method_id")),
+            date_str=date_str,
+            amount_cents=amount_cents,
+            odometer=optional_float(request.form.get("odometer"), max_val=2_000_000),
+            station=request.form.get("station") or None,
+            volume=optional_float(request.form.get("volume"), max_val=500),
+            volume_unit=request.form.get("volume_unit") if request.form.get("volume_unit") in ("L", "gal") else None,
+            price_per_unit=optional_float(request.form.get("price_per_unit"), max_val=10),
+            image_filename=image_filename,
+            raw_text=request.form.get("raw_text", ""),
+            confidence=confidence,
+        )
+    except Exception:
+        if image_filename:
+            path = os.path.join(db.RECEIPTS_DIR, image_filename)
+            if os.path.exists(path):
+                os.remove(path)
+        raise
     return jsonify({"id": new_id})
 
 
@@ -305,18 +327,30 @@ def save_maintenance():
     except (ValueError, TypeError):
         return jsonify({"error": "invalid date or amount"}), 400
 
-    new_id = db.insert_maintenance_log(
-        vehicle_id=vehicle_id,
-        payment_method_id=optional_int(request.form.get("payment_method_id")),
-        date_str=date_str,
-        amount_cents=amount_cents,
-        odometer=optional_float(request.form.get("odometer"), max_val=2_000_000),
-        shop=request.form.get("shop") or None,
-        category=category,
-        category_other=(request.form.get("category_other") or None) if category == "Other" else None,
-        notes=request.form.get("notes") or None,
-        image_filename=save_uploaded_image(file),
-    )
+    try:
+        image_filename = save_uploaded_image(file)
+    except ImageValidationError as e:
+        return jsonify({"error": str(e)}), 400
+
+    try:
+        new_id = db.insert_maintenance_log(
+            vehicle_id=vehicle_id,
+            payment_method_id=optional_int(request.form.get("payment_method_id")),
+            date_str=date_str,
+            amount_cents=amount_cents,
+            odometer=optional_float(request.form.get("odometer"), max_val=2_000_000),
+            shop=request.form.get("shop") or None,
+            category=category,
+            category_other=(request.form.get("category_other") or None) if category == "Other" else None,
+            notes=request.form.get("notes") or None,
+            image_filename=image_filename,
+        )
+    except Exception:
+        if image_filename:
+            path = os.path.join(db.RECEIPTS_DIR, image_filename)
+            if os.path.exists(path):
+                os.remove(path)
+        raise
     return jsonify({"id": new_id})
 
 

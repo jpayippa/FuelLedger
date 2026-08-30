@@ -1,4 +1,6 @@
+import os
 import re
+import threading
 from datetime import date, datetime
 
 import pytesseract
@@ -6,6 +8,15 @@ from dateutil import parser as dateparser
 from PIL import Image, ImageFilter, ImageOps
 
 import crop
+
+OCR_MAX_CONCURRENCY = int(os.environ.get("OCR_MAX_CONCURRENCY", "1"))
+OCR_SEMAPHORE_TIMEOUT_SECONDS = int(os.environ.get("OCR_SEMAPHORE_TIMEOUT_SECONDS", "30"))
+_ocr_semaphore = threading.Semaphore(OCR_MAX_CONCURRENCY)
+
+
+class OcrBusyError(Exception):
+    pass
+
 
 MONEY_RE = re.compile(r"(?<!\d)\$?\s?(\d{1,4}\.\d{2})(?!\d)")
 TOTAL_KEYWORDS = re.compile(r"\b(total|amount due|amount|sale|charged|balance due|grand total)\b", re.I)
@@ -95,8 +106,13 @@ def preprocess_for_ocr(image):
 
 
 def run_ocr(image):
-    processed = preprocess_for_ocr(image)
-    return pytesseract.image_to_string(processed, lang="eng", config="--oem 3 --psm 6")
+    if not _ocr_semaphore.acquire(timeout=OCR_SEMAPHORE_TIMEOUT_SECONDS):
+        raise OcrBusyError("The server is busy processing another receipt. Please try again shortly.")
+    try:
+        processed = preprocess_for_ocr(image)
+        return pytesseract.image_to_string(processed, lang="eng", config="--oem 3 --psm 6")
+    finally:
+        _ocr_semaphore.release()
 
 
 def extract_amount(text):

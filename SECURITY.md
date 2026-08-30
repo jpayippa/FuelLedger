@@ -8,6 +8,7 @@ FuelLedger is designed to be self-hosted on a **trusted local network** (home LA
 - There is **no rate limiting or CSRF protection**.
 - The bundled Flask server runs in development mode (`app.run(...)`), which is fine for a personal home-network deployment but is explicitly not hardened for adversarial traffic.
 - OCR and image processing run against user-uploaded files locally; while Pillow/OpenCV/Tesseract are mature libraries, no image-processing stack is immune to malformed-input bugs, so this app should not be exposed to untrusted uploaders.
+- Uploads are still bounded, though: request size is capped (`MAX_UPLOAD_MB`, default 15), only JPEG/PNG/WEBP are accepted, decoded pixel count is capped (`MAX_IMAGE_PIXELS`, default ~40 megapixels — rejects decompression-bomb-style images instead of decoding them), and only one receipt is OCR'd at a time (`OCR_MAX_CONCURRENCY`, default 1) so a flood of uploads can't exhaust CPU on modest hardware.
 
 **Do not expose FuelLedger directly to the public internet.** If you need remote access, put it behind:
 - A VPN or overlay network (Tailscale, WireGuard), or

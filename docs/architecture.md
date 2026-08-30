@@ -70,6 +70,10 @@ Additive, idempotent, never destructive:
 4. **OCR**: Tesseract (`--oem 3 --psm 6`, tuned for a single receipt column).
 5. **Field extraction**: line-scanning regex + keyword-anchoring (e.g. a dollar amount on a line containing "total" is preferred over one on a line containing "gal") extracts amount, date, station (matched against a fixed brand list, falling back to a heuristic first-line guess), volume/unit, and price per unit. Each field reports a confidence level (`high`/`low`/`none`) based on whether it was keyword-anchored or a fallback guess — surfaced in the UI so low-confidence fields get flagged for manual review before saving.
 
+### Upload safety and OCR resource limits (`uploads.py`, `ocr.py`)
+
+Every upload (`/scan`, `/save/fuel`, `/save/maintenance`) goes through one shared `uploads.load_validated_image()`: format-checked against an allowlist (JPEG/PNG/WEBP), decoded eagerly (never lazily trusted), EXIF-orientation-corrected, and capped to a maximum dimension before it ever reaches OpenCV. Pillow's own decompression-bomb pixel-count guard is turned from a silent warning into a hard rejection at a configured threshold. Flask's `MAX_CONTENT_LENGTH` rejects oversized request bodies outright (413) before any of this runs. A `threading.Semaphore` around `ocr.run_ocr()` caps how many receipts get processed at once (default 1, since this runs on modest hardware) — a second concurrent scan waits briefly rather than competing for CPU, and only times out to a friendly "server busy" response if something is genuinely stuck. All five limits are environment-variable-configurable: `MAX_UPLOAD_MB`, `MAX_IMAGE_PIXELS`, `PREPROCESS_MAX_DIMENSION`, `OCR_MAX_CONCURRENCY`, `OCR_SEMAPHORE_TIMEOUT_SECONDS`.
+
 ## Analytics queries
 
 - Weekly/monthly/yearly fuel totals: SQL `strftime()` grouping.

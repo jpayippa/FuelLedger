@@ -123,6 +123,14 @@ fuelPhotoInput.addEventListener('change', async () => {
   try {
     const res = await fetch('/scan', { method: 'POST', body: formData });
     const data = await res.json();
+    if (!res.ok) {
+      const message = res.status === 503
+        ? (data.error || 'Server is busy processing another receipt. Please try again shortly.')
+        : (data.error || 'Could not read that receipt. Enter details manually.');
+      alert(message);
+      fuelReview.classList.add('show');
+      return;
+    }
     fuelFDate.value = data.date || '';
     fuelFAmount.value = data.amount != null ? data.amount.toFixed(2) : '';
     fuelFStation.value = data.station || '';
@@ -256,6 +264,10 @@ maintPhotoInput.addEventListener('change', async () => {
   try {
     const res = await fetch('/scan', { method: 'POST', body: formData });
     const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 503) alert(data.error || 'Server is busy processing another receipt. Please try again shortly.');
+      return;
+    }
     if (data.date) document.getElementById('maint-f-date').value = data.date;
     if (data.amount != null) document.getElementById('maint-f-amount').value = data.amount.toFixed(2);
     applyPaymentHint(data, 'maint-f-payment', 'maint-payment-hint');
