@@ -88,9 +88,8 @@ def _otsu_threshold(img):
 
 def generate_preprocessing_variants(denoised_gray_image):
     """Prepares a small number of cheap binarization candidates instead of
-    committing to one destructive threshold. Not yet tried in a cascade
-    (that's the next step of this hardening effort) - preprocess_for_ocr
-    still selects "otsu" today, so current OCR output is unchanged."""
+    committing to one destructive threshold. run_ocr()'s CASCADE_ATTEMPTS
+    tries a bounded sequence of these by name until one passes validation."""
     variants = {"normalized": denoised_gray_image}
 
     arr = np.array(denoised_gray_image)
