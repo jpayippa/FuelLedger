@@ -14,16 +14,16 @@ def test_concurrent_ocr_calls_are_serialized(monkeypatch):
     active = {"count": 0, "max_seen": 0}
     lock = threading.Lock()
 
-    def fake_image_to_string(image, **kwargs):
+    def fake_run_tesseract_pass(image, psm):
         with lock:
             active["count"] += 1
             active["max_seen"] = max(active["max_seen"], active["count"])
         time.sleep(0.2)
         with lock:
             active["count"] -= 1
-        return "fake ocr text"
+        return "fake ocr text", 90.0
 
-    monkeypatch.setattr(ocr.pytesseract, "image_to_string", fake_image_to_string)
+    monkeypatch.setattr(ocr, "_run_tesseract_pass", fake_run_tesseract_pass)
 
     image = make_synthetic_receipt(CLEAN_FUEL_RECEIPT)
     results = []

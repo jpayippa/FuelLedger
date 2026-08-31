@@ -88,9 +88,8 @@ def _otsu_threshold(img):
 
 def generate_preprocessing_variants(denoised_gray_image):
     """Prepares a small number of cheap binarization candidates instead of
-    committing to one destructive threshold. Not yet tried in a cascade
-    (that's the next step of this hardening effort) - preprocess_for_ocr
-    still selects "otsu" today, so current OCR output is unchanged."""
+    committing to one destructive threshold. run_ocr()'s CASCADE_ATTEMPTS
+    tries a bounded sequence of these by name until one passes validation."""
     variants = {"normalized": denoised_gray_image}
 
     arr = np.array(denoised_gray_image)
@@ -134,16 +133,70 @@ def preprocess_for_ocr(image):
     img = img.filter(ImageFilter.MedianFilter(size=3))
 
     variants = generate_preprocessing_variants(img)
-    return variants["otsu"], quality_warnings
+    return variants, quality_warnings
+
+
+# (variant, psm) attempts tried in order; stops at the first that produces the
+# fields a fuel log actually needs (see _passes_validation). Capped at 3 so a
+# stubbornly bad photo can't trigger unbounded OCR work.
+CASCADE_ATTEMPTS = [
+    ("otsu", "6"),
+    ("adaptive", "6"),
+    ("otsu", "4"),
+]
+
+
+def _text_from_image_to_data(data):
+    """Reconstructs line-oriented text from pytesseract.image_to_data output,
+    grouping words by (block_num, par_num, line_num) in encounter order -
+    verified empirically to reproduce the same text image_to_string would
+    produce, so every extract_* regex below keeps working unchanged."""
+    lines = {}
+    for i, word in enumerate(data["text"]):
+        word = word.strip()
+        if not word:
+            continue
+        key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+        lines.setdefault(key, []).append(word)
+    return "\n".join(" ".join(words) for words in lines.values())
+
+
+def _run_tesseract_pass(image, psm):
+    """The one seam that actually talks to Tesseract - tests monkeypatch this
+    directly rather than pytesseract itself."""
+    data = pytesseract.image_to_data(
+        image, lang="eng", config=f"--oem 3 --psm {psm}", output_type=pytesseract.Output.DICT
+    )
+    text = _text_from_image_to_data(data)
+    confidences = [c for c in data["conf"] if isinstance(c, (int, float)) and c >= 0]
+    mean_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+    return text, mean_confidence
+
+
+def _passes_validation(text):
+    """Cheap acceptance check: does this OCR attempt contain the two fields a
+    saved fuel log actually needs? Richer cross-field validation (total ≈
+    volume × price/unit, etc.) belongs to the scored-extraction rework, not
+    execution-strategy code."""
+    return extract_amount(text)[0] is not None and extract_date(text)[0] is not None
 
 
 def run_ocr(image):
     if not _ocr_semaphore.acquire(timeout=OCR_SEMAPHORE_TIMEOUT_SECONDS):
         raise OcrBusyError("The server is busy processing another receipt. Please try again shortly.")
     try:
-        processed, quality_warnings = preprocess_for_ocr(image)
-        text = pytesseract.image_to_string(processed, lang="eng", config="--oem 3 --psm 6")
-        return text, quality_warnings
+        variants, quality_warnings = preprocess_for_ocr(image)
+        first_text = None
+        for variant_name, psm in CASCADE_ATTEMPTS:
+            variant_image = variants.get(variant_name)
+            if variant_image is None:
+                continue
+            text, _ = _run_tesseract_pass(variant_image, psm)
+            if first_text is None:
+                first_text = text
+            if _passes_validation(text):
+                return text, quality_warnings
+        return first_text, quality_warnings
     finally:
         _ocr_semaphore.release()
 

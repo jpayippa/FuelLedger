@@ -25,7 +25,7 @@ Or just use Docker (`docker build -t fuelledger:latest .` then `docker compose u
 
 1. Open an issue first for anything non-trivial, so we can agree on approach before you spend time on it.
 2. Keep pull requests focused — one feature or fix per PR.
-3. Test your change manually against a real (or synthetic) receipt image where OCR is involved; there's no automated test suite yet, so manual verification matters.
+3. Run the test suite (`pytest`) and, for OCR-related changes, also test manually against a real (or synthetic) receipt image.
 4. Run the linter before submitting: `ruff check .`
 5. Make sure `docker build` still succeeds.
 
