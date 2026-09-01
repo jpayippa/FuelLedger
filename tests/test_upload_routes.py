@@ -2,7 +2,6 @@ import io
 import os
 import sqlite3
 
-import pytest
 from PIL import Image
 
 import app as flask_app_module
@@ -70,13 +69,23 @@ class TestSaveFuelUploadSafety:
 
 
 class TestOrphanFileCleanup:
-    def test_failed_insert_does_not_leave_orphaned_image(self, client, fresh_db):
+    def test_failed_insert_does_not_leave_orphaned_image(self, client, fresh_db, vehicle_id, monkeypatch):
+        # A known-bad vehicle_id is now rejected before the image is ever
+        # saved (see db.vehicle_exists), so it no longer exercises this
+        # cleanup path. Force a failure at insert time instead, on an
+        # otherwise-valid request, to prove the save_fuel() except-block
+        # cleanup still works for whatever reason the insert might fail.
+        def failing_insert(*args, **kwargs):
+            raise sqlite3.IntegrityError("simulated failure")
+
+        monkeypatch.setattr(flask_app_module.db, "insert_fuel_log", failing_insert)
+
         image = make_synthetic_receipt(CLEAN_FUEL_RECEIPT)
-        with pytest.raises(sqlite3.IntegrityError):
-            client.post("/save/fuel", data={
-                "vehicle_id": "999999", "date": "2026-01-01", "amount": "10.00",
-                "receipt": (jpeg_bytes(image), "receipt.jpg"),
-            }, content_type="multipart/form-data")
+        res = client.post("/save/fuel", data={
+            "vehicle_id": str(vehicle_id), "date": "2026-01-01", "amount": "10.00",
+            "receipt": (jpeg_bytes(image), "receipt.jpg"),
+        }, content_type="multipart/form-data")
+        assert res.status_code == 400
         assert os.listdir(fresh_db.RECEIPTS_DIR) == []
 
 

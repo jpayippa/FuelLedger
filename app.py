@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import uuid
 from datetime import date, datetime
 
@@ -34,6 +35,15 @@ def handle_upload_too_large(e):
     return jsonify({"error": f"File too large. Maximum upload size is {uploads.MAX_UPLOAD_MB} MB."}), 413
 
 
+@app.errorhandler(sqlite3.IntegrityError)
+def handle_integrity_error(e):
+    """Safety net for any foreign-key/unique-constraint violation not already
+    caught by an explicit pre-check below (db.vehicle_exists, etc.) - a route
+    that misses a case should still degrade to a clean 4xx, never a raw
+    traceback."""
+    return jsonify({"error": "This record conflicts with existing data."}), 400
+
+
 def cents_from_amount(amount_str, max_amount=999.99):
     amount = float(amount_str)
     if not (0 < amount <= max_amount):
@@ -48,12 +58,20 @@ def validate_date(date_str):
     return date_str
 
 
-def optional_float(value, min_val=0, max_val=1e6):
+def strict_optional_float(value, field_name, min_val=0, max_val=1e6):
+    """A missing value (None/empty string) is None - the field is optional.
+    A *provided* value that fails to parse or falls outside range raises
+    ValueError instead of silently being treated as if the field had been
+    omitted - omitted and invalid are not the same
+    thing, and laundering the latter into the former hides bad input."""
     if value in (None, ""):
         return None
-    parsed = float(value)
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"invalid {field_name}") from None
     if not (min_val <= parsed <= max_val):
-        return None
+        raise ValueError(f"{field_name} out of range")
     return parsed
 
 
@@ -183,11 +201,14 @@ def api_delete_vehicle(vehicle_id):
 def api_payment_methods():
     if request.method == "POST":
         data = request.get_json(force=True)
+        name = data.get("name", "").strip() or "Unnamed"
+        if db.payment_method_name_taken(name):
+            return jsonify({"error": "A payment method with that name already exists"}), 400
         card_last4 = (data.get("card_last4") or "").strip() or None
         if card_last4 and (not card_last4.isdigit() or len(card_last4) != 4):
             card_last4 = None
         pm_id = db.insert_payment_method(
-            data.get("name", "").strip() or "Unnamed",
+            name,
             (data.get("notes") or "").strip() or None,
             card_last4=card_last4,
         )
@@ -251,12 +272,21 @@ def save_fuel():
     vehicle_id = optional_int(request.form.get("vehicle_id"))
     if not vehicle_id:
         return jsonify({"error": "vehicle_id is required"}), 400
+    if not db.vehicle_exists(vehicle_id):
+        return jsonify({"error": "Selected vehicle does not exist"}), 400
+
+    payment_method_id = optional_int(request.form.get("payment_method_id"))
+    if payment_method_id and not db.payment_method_exists(payment_method_id):
+        return jsonify({"error": "Selected payment method does not exist"}), 400
 
     try:
         validate_date(date_str)
         amount_cents = cents_from_amount(amount_str)
+        odometer = strict_optional_float(request.form.get("odometer"), "odometer", max_val=2_000_000)
+        volume = strict_optional_float(request.form.get("volume"), "volume", max_val=500)
+        price_per_unit = strict_optional_float(request.form.get("price_per_unit"), "price per unit", max_val=10)
     except (ValueError, TypeError):
-        return jsonify({"error": "invalid date or amount"}), 400
+        return jsonify({"error": "invalid date, amount, odometer, volume, or price per unit"}), 400
 
     try:
         confidence = json.loads(request.form.get("confidence") or "null")
@@ -271,14 +301,14 @@ def save_fuel():
     try:
         new_id = db.insert_fuel_log(
             vehicle_id=vehicle_id,
-            payment_method_id=optional_int(request.form.get("payment_method_id")),
+            payment_method_id=payment_method_id,
             date_str=date_str,
             amount_cents=amount_cents,
-            odometer=optional_float(request.form.get("odometer"), max_val=2_000_000),
+            odometer=odometer,
             station=request.form.get("station") or None,
-            volume=optional_float(request.form.get("volume"), max_val=500),
+            volume=volume,
             volume_unit=request.form.get("volume_unit") if request.form.get("volume_unit") in ("L", "gal") else None,
-            price_per_unit=optional_float(request.form.get("price_per_unit"), max_val=10),
+            price_per_unit=price_per_unit,
             image_filename=image_filename,
             raw_text=request.form.get("raw_text", ""),
             confidence=confidence,
@@ -319,14 +349,21 @@ def save_maintenance():
     category = request.form.get("category") or "Other"
     if not vehicle_id:
         return jsonify({"error": "vehicle_id is required"}), 400
+    if not db.vehicle_exists(vehicle_id):
+        return jsonify({"error": "Selected vehicle does not exist"}), 400
     if category not in db.MAINTENANCE_CATEGORIES:
         category = "Other"
+
+    payment_method_id = optional_int(request.form.get("payment_method_id"))
+    if payment_method_id and not db.payment_method_exists(payment_method_id):
+        return jsonify({"error": "Selected payment method does not exist"}), 400
 
     try:
         validate_date(date_str)
         amount_cents = cents_from_amount(amount_str, max_amount=99999.99)
+        odometer = strict_optional_float(request.form.get("odometer"), "odometer", max_val=2_000_000)
     except (ValueError, TypeError):
-        return jsonify({"error": "invalid date or amount"}), 400
+        return jsonify({"error": "invalid date, amount, or odometer"}), 400
 
     try:
         image_filename = save_uploaded_image(file)
@@ -336,10 +373,10 @@ def save_maintenance():
     try:
         new_id = db.insert_maintenance_log(
             vehicle_id=vehicle_id,
-            payment_method_id=optional_int(request.form.get("payment_method_id")),
+            payment_method_id=payment_method_id,
             date_str=date_str,
             amount_cents=amount_cents,
-            odometer=optional_float(request.form.get("odometer"), max_val=2_000_000),
+            odometer=odometer,
             shop=request.form.get("shop") or None,
             category=category,
             category_other=(request.form.get("category_other") or None) if category == "Other" else None,
@@ -380,6 +417,8 @@ def save_odometer():
     date_str = data.get("date", "")
     if not vehicle_id:
         return jsonify({"error": "vehicle_id is required"}), 400
+    if not db.vehicle_exists(vehicle_id):
+        return jsonify({"error": "Selected vehicle does not exist"}), 400
     try:
         validate_date(date_str)
         odometer = float(data.get("odometer"))

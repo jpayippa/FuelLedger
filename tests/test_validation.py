@@ -6,7 +6,7 @@ import app as flask_app_module
 
 cents_from_amount = flask_app_module.cents_from_amount
 validate_date = flask_app_module.validate_date
-optional_float = flask_app_module.optional_float
+strict_optional_float = flask_app_module.strict_optional_float
 optional_int = flask_app_module.optional_int
 
 
@@ -59,19 +59,27 @@ class TestValidateDate:
             validate_date("01/01/2026")
 
 
-class TestOptionalFloat:
-    def test_none_returns_none(self):
-        assert optional_float(None) is None
-
-    def test_empty_string_returns_none(self):
-        assert optional_float("") is None
+class TestStrictOptionalFloat:
+    def test_omitted_value_returns_none(self):
+        assert strict_optional_float(None, "odometer") is None
+        assert strict_optional_float("", "odometer") is None
 
     def test_valid_value(self):
-        assert optional_float("12.5") == 12.5
+        assert strict_optional_float("12.5", "odometer") == 12.5
 
-    def test_out_of_range_returns_none(self):
-        assert optional_float("-1", min_val=0, max_val=100) is None
-        assert optional_float("101", min_val=0, max_val=100) is None
+    def test_provided_negative_value_raises(self):
+        # a value the user actually typed that fails validation must not be
+        # silently treated as "not provided"
+        with pytest.raises(ValueError):
+            strict_optional_float("-5", "odometer")
+
+    def test_provided_out_of_range_value_raises(self):
+        with pytest.raises(ValueError):
+            strict_optional_float("999999999", "odometer", max_val=2_000_000)
+
+    def test_non_numeric_value_raises(self):
+        with pytest.raises(ValueError):
+            strict_optional_float("abc", "odometer")
 
 
 class TestOptionalInt:
