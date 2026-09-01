@@ -1,16 +1,8 @@
 """Flask route tests via the test client - both success paths and failure
-inputs. Where current behavior is a bug (an uncaught exception rather than a
-clean 4xx), the test says so explicitly in its name/docstring and asserts the
-exception, rather than asserting a status code that doesn't actually occur.
-Flask's test client re-raises unhandled view-function exceptions when
-app.testing=True (confirmed by running these exact requests before writing
-these assertions), instead of turning them into an HTTP 500 response."""
+inputs."""
 
 import io
-import sqlite3
 import zipfile
-
-import pytest
 
 
 # ---- Success paths ----
@@ -132,25 +124,50 @@ class TestExportRoutes:
 # ---- Failure paths ----
 
 class TestFailureInputs:
-    def test_save_fuel_with_unknown_vehicle_id_currently_raises_bug_see_phase_5(self, client):
-        """Bug, not a spec: an unknown vehicle_id should be a clean 400, but
-        currently the FK violation from the raw INSERT propagates as an
-        uncaught sqlite3.IntegrityError instead of being caught and turned
-        into an error response. Fix belongs in Phase 5 (validation)."""
-        with pytest.raises(sqlite3.IntegrityError):
-            client.post("/save/fuel", data={"vehicle_id": "999999", "date": "2026-01-01", "amount": "10.00"})
+    def test_save_fuel_with_unknown_vehicle_id_returns_400(self, client):
+        res = client.post("/save/fuel", data={"vehicle_id": "999999", "date": "2026-01-01", "amount": "10.00"})
+        assert res.status_code == 400
+        assert "vehicle" in res.get_json()["error"].lower()
 
-    def test_save_fuel_with_unknown_payment_method_id_currently_raises_bug_see_phase_5(self, client, vehicle_id):
-        with pytest.raises(sqlite3.IntegrityError):
-            client.post("/save/fuel", data={
-                "vehicle_id": str(vehicle_id), "date": "2026-01-01", "amount": "10.00",
-                "payment_method_id": "999999",
-            })
+    def test_save_fuel_with_unknown_payment_method_id_returns_400(self, client, vehicle_id):
+        res = client.post("/save/fuel", data={
+            "vehicle_id": str(vehicle_id), "date": "2026-01-01", "amount": "10.00",
+            "payment_method_id": "999999",
+        })
+        assert res.status_code == 400
+        assert "payment method" in res.get_json()["error"].lower()
 
-    def test_duplicate_payment_method_name_currently_raises_bug_see_phase_5(self, client):
+    def test_save_maintenance_with_unknown_vehicle_id_returns_400(self, client):
+        res = client.post("/save/maintenance", data={
+            "vehicle_id": "999999", "date": "2026-01-01", "amount": "10.00",
+        })
+        assert res.status_code == 400
+        assert "vehicle" in res.get_json()["error"].lower()
+
+    def test_save_odometer_with_unknown_vehicle_id_returns_400(self, client):
+        res = client.post("/save/odometer", json={
+            "vehicle_id": 999999, "date": "2026-01-01", "odometer": 1000,
+        })
+        assert res.status_code == 400
+        assert "vehicle" in res.get_json()["error"].lower()
+
+    def test_duplicate_payment_method_name_returns_400(self, client):
         client.post("/api/payment-methods", json={"name": "Visa"})
-        with pytest.raises(sqlite3.IntegrityError):
-            client.post("/api/payment-methods", json={"name": "Visa"})
+        res = client.post("/api/payment-methods", json={"name": "Visa"})
+        assert res.status_code == 400
+        assert "already exists" in res.get_json()["error"].lower()
+
+    def test_save_fuel_with_invalid_odometer_returns_400(self, client, vehicle_id):
+        # a provided-but-invalid value must be rejected, not silently saved as null
+        res = client.post("/save/fuel", data={
+            "vehicle_id": str(vehicle_id), "date": "2026-01-01", "amount": "10.00", "odometer": "-5",
+        })
+        assert res.status_code == 400
+
+    def test_all_vehicles_archived_index_still_renders(self, client, vehicle_id):
+        client.post(f"/api/vehicles/{vehicle_id}/archive", json={"archived": True})
+        res = client.get("/")
+        assert res.status_code == 200
 
     def test_missing_vehicle_id_returns_400(self, client):
         res = client.post("/save/fuel", data={"date": "2026-01-01", "amount": "10.00"})
